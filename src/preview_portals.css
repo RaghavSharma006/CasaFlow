@@ -1,0 +1,96 @@
+/* v8.1: Restore access to every CasaFlow workspace in both the live app and preview. */
+.a7.cf8 .cf8-mobile-more-button{display:none;}
+.a7.cf8 .cf8-preview-banner{display:flex;align-items:center;gap:13px;flex-wrap:wrap;border:1px solid var(--cf-line);background:var(--cf-card);border-radius:12px;margin:0 0 25px;padding:11px 15px;color:var(--cf-ink)}
+.a7.cf8 .cf8-preview-banner>span{font-size:10px;letter-spacing:.14em;font-weight:900;padding:7px 10px;border-radius:7px;background:var(--cf-acid);color:#193023;white-space:nowrap}
+.a7.cf8 .cf8-preview-banner>p{font-size:12px;flex:1;min-width:160px;color:var(--cf-muted);line-height:1.6;margin:0}
+.a7.cf8 .cf8-preview-banner>a{display:flex;align-items:center;gap:5px;color:var(--cf-ink);font-weight:800;font-size:12px;text-decoration:none;white-space:nowrap}
+.a7.cf8 .cf8-demo-role{display:flex;align-items:center;gap:6px;border:1px solid var(--cf-line);border-radius:10px;background:var(--cf-card);padding:0 11px;color:var(--cf-ink);height:41px}
+.a7.cf8 .cf8-demo-role select{min-height:35px;border:0!important;background:transparent!important;color:var(--cf-ink);font-size:12px;font-weight:800;cursor:pointer;appearance:none;max-width:110px;padding:0!important}
+.a7.cf8 .cf8-demo-role select:focus-visible{outline:2px solid #78a4ec}
+.a7.cf8 .cp-page{min-width:0;display:grid;gap:25px}
+.a7.cf8 .cp-page-heading{display:flex;align-items:center;justify-content:space-between;gap:18px}
+.a7.cf8 .cp-page-heading h1{font:italic 500 clamp(40px,4.2vw,64px)/1.12 var(--cf-title);margin:12px 0 9px;letter-spacing:-.04em;color:var(--cf-ink)}
+.a7.cf8 .cp-page-heading p{font-size:15px;color:var(--cf-muted);margin:0;line-height:1.55}
+.a7.cf8 .cp-kicker{font:800 11px/1.4 'DM Sans',sans-serif;color:var(--cf-muted);letter-spacing:.16em}
+.a7.cf8 .cp-demo-badge{color:#29432f;background:var(--cf-acid);border-radius:12px;font-size:11px;font-weight:800;padding:10px 14px;display:flex;align-items:center;gap:7px;white-space:nowrap}
+.a7.cf8 .cp-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border-block:1px solid var(--cf-line);padding:19px 0}
+.a7.cf8 .cp-summary>div{display:grid;gap:7px;padding:6px 20px;border-left:1px solid var(--cf-line)}
+.a7.cf8 .cp-summary>div:first-child{border-left:0;padding-left:0}
+.a7.cf8 .cp-summary span{font-size:10px;letter-spacing:.13em;color:var(--cf-muted);font-weight:800}
+.a7.cf8 .cp-summary strong{font:500 clamp(28px,3vw,43px)/1.15 var(--cf-title);color:var(--cf-ink)}
+.a7.cf8 .cp-surface{background:var(--cf-card);border:1px solid var(--cf-line);border-radius:18px;padding:25px;min-width:0;box-shadow:0 8px 24px #17352b08}
+.a7.cf8 .cp-section-bar{display:flex;justify-content:space-between;gap:14px;align-items:center;margin-bottom:20px}
+.a7.cf8 .cp-section-bar h2{font:500 clamp(23px,2vw,35px)/1.2 var(--cf-title);color:var(--cf-ink);margin:6px 0 0}
+.a7.cf8 .cp-input-filter{display:flex;align-items:center;gap:8px;background:var(--cf-input);border:1px solid var(--cf-line);border-radius:10px;padding:0 10px;color:var(--cf-ink)}
+.a7.cf8 .cp-input-filter select{border:0;min-height:40px;background:transparent;color:var(--cf-ink);max-width:150px;font-size:12px}
+.a7.cf8 .cp-task-list{display:grid;gap:10px}
+.a7.cf8 .cp-task{display:grid;grid-template-columns:46px minmax(0,1fr) auto;align-items:center;gap:15px;border:1px solid var(--cf-line);border-radius:13px;padding:17px;min-width:0;background:var(--cf-card)}
+.a7.cf8 .cp-task-bullet{height:46px;width:46px;border-radius:11px;background:#e0e6db;color:#234838;display:grid;place-items:center}
+.a7.cf8[data-theme="night"] .cp-task-bullet{background:#294438;color:#dfebce}
+.a7.cf8 .cp-task-main{display:grid;gap:6px;min-width:0}.a7.cf8 .cp-task-main>strong{font-size:16px;color:var(--cf-ink)}.a7.cf8 .cp-task-main>p{font-size:13px;color:var(--cf-muted);margin:0;line-height:1.45}
+.a7.cf8 .cp-tags{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--cf-muted);font-size:11px;margin-top:4px}
+.a7.cf8 .cp-status{display:inline-flex;align-items:center;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:800;text-transform:capitalize;background:var(--cf-line);color:var(--cf-ink);line-height:1.4}
+.a7.cf8 .cp-status.doing,.a7.cf8 .cp-status.done{background:#d6edda;color:#1b583f}.a7.cf8 .cp-status.open{background:#fbe7ca;color:#855326}.a7.cf8 .cp-status.inspection{background:#eee0fb;color:#61428b}
+.a7.cf8[data-theme="night"] .cp-status.doing,.a7.cf8[data-theme="night"] .cp-status.done{background:#2b4b38;color:#d5f3cb}
+.a7.cf8[data-theme="night"] .cp-status.open{background:#4e3826;color:#f4d4a1}
+.a7.cf8[data-theme="night"] .cp-status.inspection{background:#42364f;color:#ecdafa}
+.a7.cf8 .cp-priority{color:#9c493c;background:#ffebdf;border:1px solid #ebc5bb;font-weight:800;border-radius:6px;padding:4px 7px;text-transform:uppercase}
+.a7.cf8 .cp-action{display:inline-flex;justify-content:center;align-items:center;gap:8px;background:var(--cf-forest);color:#f5ffe9;border:1px solid var(--cf-forest);border-radius:10px;min-height:44px;padding:9px 14px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap}
+.a7.cf8 .cp-action:disabled{opacity:.65;cursor:not-allowed}
+.a7.cf8 .cp-empty{display:flex;align-items:center;flex-direction:column;gap:9px;padding:32px;color:var(--cf-muted)}
+.a7.cf8 .cp-empty strong{color:var(--cf-ink)}.a7.cf8 .cp-empty p{margin:0}
+.a7.cf8 .cp-staff-table{display:grid}.a7.cf8 .cp-staff{display:grid;grid-template-columns:42px minmax(0,1fr) 94px 85px;gap:12px;align-items:center;padding:13px 5px;border-top:1px solid var(--cf-line)}
+.a7.cf8 .cp-staff>div{display:grid;gap:4px;min-width:0}.a7.cf8 .cp-staff strong{font-size:14px}.a7.cf8 .cp-staff small{font-size:11px;color:var(--cf-muted)}
+.a7.cf8 .cp-avatar{display:grid;place-items:center;background:#d8e8d5;color:#204f39;font-weight:800;width:41px;height:41px;border-radius:50%;font-size:12px}
+.a7.cf8 .cp-chat-layout{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(235px,.8fr);gap:18px}
+.a7.cf8 .cp-chat-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}.a7.cf8 .cp-chat-tabs button{color:var(--cf-ink);background:var(--cf-card);border:1px solid var(--cf-line);border-radius:10px;min-height:45px;padding:11px 16px;font-weight:750;cursor:pointer}.a7.cf8 .cp-chat-tabs button.active{background:var(--cf-acid);color:#1d3425;border-color:#a6ca69}
+.a7.cf8 .cp-chat-disclaimer{font-size:13px;color:var(--cf-muted)}
+.a7.cf8 .cp-chat-messages{background:color-mix(in srgb,var(--cf-forest) 5%,var(--cf-card));border:1px solid var(--cf-line);border-radius:12px;min-height:265px;max-height:365px;overflow:auto;display:flex;align-items:flex-start;flex-direction:column;gap:10px;padding:15px}
+.a7.cf8 .cp-message{background:var(--cf-card);color:var(--cf-ink);border:1px solid var(--cf-line);border-radius:11px;padding:12px 15px;max-width:85%;min-width:0;overflow-wrap:anywhere}
+.a7.cf8 .cp-message.mine{align-self:flex-end;background:color-mix(in srgb,var(--cf-acid) 38%,var(--cf-card))}.a7.cf8 .cp-message small{font-size:11px;color:var(--cf-muted);font-weight:800}.a7.cf8 .cp-message p{font-size:14px;line-height:1.5;margin:8px 0 0;color:var(--cf-ink)}
+.a7.cf8 .cp-chat-compose{display:flex;gap:9px;margin-top:14px}.a7.cf8 .cp-chat-compose input{flex:1;min-width:0;border-radius:10px;padding:10px 12px;min-height:46px}.a7.cf8 .cp-chat-compose button{border:0;background:var(--cf-forest);color:#fff;border-radius:10px;padding:10px 17px;font-weight:800;display:flex;align-items:center;gap:8px;cursor:pointer}.a7.cf8 .cp-chat-compose button:disabled{opacity:.55}
+.a7.cf8 .cp-chat-privacy{display:flex;align-items:flex-start;flex-direction:column;gap:15px}.a7.cf8 .cp-chat-privacy h2{font:500 30px var(--cf-title);margin:0}.a7.cf8 .cp-chat-privacy p{font-size:14px;color:var(--cf-muted);line-height:1.65;margin:0}.a7.cf8 .cp-preview-disclosure{border-top:1px solid var(--cf-line);padding-top:18px}
+.a7.cf8 .cp-activity{display:grid}.a7.cf8 .cp-activity>div{display:flex;gap:25px;border-top:1px solid var(--cf-line);padding:18px 2px}.a7.cf8 .cp-activity>div>span{font:800 12px 'DM Sans';color:var(--cf-muted);width:66px}.a7.cf8 .cp-activity>div>div{display:grid;gap:6px}.a7.cf8 .cp-activity strong{font-size:15px;color:var(--cf-ink)}.a7.cf8 .cp-activity small{color:var(--cf-muted);font-size:13px}
+.a7.cf8 .cp-setting{display:flex;gap:20px;justify-content:space-between;align-items:center;padding:22px 0;border-top:1px solid var(--cf-line)}.a7.cf8 .cp-setting strong{font-size:15px}.a7.cf8 .cp-setting p{color:var(--cf-muted);font-size:13px;margin:5px 0 0}
+.a7.cf8 .cp-modal-overlay{position:fixed;inset:0;background:#0008;z-index:70;display:flex;justify-content:flex-end;align-items:stretch}.a7.cf8 .cp-room-modal{background:var(--cf-card);padding:40px;position:relative;max-width:440px;width:min(440px,100vw);overflow:auto;color:var(--cf-ink)}.a7.cf8 .cp-room-modal h2{font:500 50px var(--cf-title);margin:20px 0 5px}.a7.cf8 .cp-room-modal h3{font:500 26px var(--cf-title);margin:34px 0 12px}.a7.cf8 .cp-room-modal p{color:var(--cf-muted);font-size:14px}.a7.cf8 .cp-status-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px}.a7.cf8 .cp-status-actions button{min-height:44px;border:1px solid var(--cf-line);background:var(--cf-input);color:var(--cf-ink);border-radius:8px;text-transform:capitalize;font-weight:700}.a7.cf8 .cp-status-actions button:disabled{background:var(--cf-acid);color:#153521}.a7.cf8 .cp-close{position:absolute;right:22px;top:25px;background:transparent;border:0;color:var(--cf-ink);cursor:pointer}
+.a7.cf8 .cf8-more-overlay{display:none}
+@media(max-width:1040px){.a7.cf8 .cp-chat-layout{grid-template-columns:1fr}.a7.cf8 .cp-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.a7.cf8 .cp-summary>div:nth-child(odd){border-left:0;padding-left:0}.a7.cf8 .cp-summary>div:nth-child(n+3){border-top:1px solid var(--cf-line);padding-top:17px}.a7.cf8 .cp-page-heading{align-items:flex-start}}
+@media(max-width:700px){
+ /* The old v8 CSS hid nav items 6+, making owner chat/activity/settings unreachable. 4+More replaces it. */
+ .a7.cf8 .sidebar nav .cf8-nav-item:nth-child(n+5){display:none!important}
+ .a7.cf8 .sidebar nav .cf8-mobile-more-button{display:flex!important;align-items:center;justify-content:center;flex:1;max-width:64px;min-width:44px;height:49px;padding:8px!important;color:#eff9ed;background:transparent;border:0;border-radius:9px}
+ .a7.cf8 .sidebar nav .cf8-mobile-more-button>span{display:none}
+ .a7.cf8 .cf8-more-overlay{display:flex;position:fixed;inset:0;background:#06150fc4;z-index:60;align-items:flex-end;justify-content:center}
+ .a7.cf8 .cf8-more-sheet{width:100%;max-height:78vh;overflow:auto;background:var(--cf-card);border-radius:20px 20px 0 0;padding:18px 20px 90px;color:var(--cf-ink);display:grid;gap:7px}
+ .a7.cf8 .cf8-more-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.a7.cf8 .cf8-more-head>strong{font:500 25px var(--cf-title)}.a7.cf8 .cf8-more-head>button{color:var(--cf-ink);background:none;border:0;min-height:44px;min-width:44px}
+ .a7.cf8 .cf8-more-sheet>button{display:flex;align-items:center;gap:15px;color:var(--cf-ink);padding:13px 12px;min-height:48px;background:transparent;border:1px solid var(--cf-line);border-radius:10px;font-weight:750;text-align:left}
+ .a7.cf8 .cf8-more-sheet>button.active{background:var(--cf-acid);color:#1b3224}
+ .a7.cf8 .cf8-preview-banner{align-items:flex-start;gap:8px}.a7.cf8 .cf8-preview-banner>p{font-size:11px;min-width:170px}
+ .a7.cf8 .cf8-demo-role{padding:0 7px}.a7.cf8 .cf8-demo-role select{max-width:73px;font-size:10px}
+ .a7.cf8 .cp-page-heading{display:block}.a7.cf8 .cp-demo-badge{width:max-content;margin-top:14px}
+ .a7.cf8 .cp-surface{padding:16px}.a7.cf8 .cp-task{grid-template-columns:40px minmax(0,1fr);padding:12px;gap:10px}.a7.cf8 .cp-task-bullet{width:40px;height:40px}.a7.cf8 .cp-task>.cp-action{grid-column:2;justify-self:flex-start}
+ .a7.cf8 .cp-staff{grid-template-columns:40px minmax(0,1fr);gap:8px}.a7.cf8 .cp-staff>.cp-status,.a7.cf8 .cp-staff>small{grid-column:2;justify-self:flex-start}
+ .a7.cf8 .cp-section-bar{align-items:flex-start;flex-wrap:wrap}.a7.cf8 .cp-chat-compose button{font-size:12px;padding:9px 11px}
+ .a7.cf8 .cp-setting{flex-direction:column;align-items:flex-start}.a7.cf8 .cp-summary{gap:0}
+ .a7.cf8 .cp-room-modal{padding:30px 18px}
+}
+@media(prefers-reduced-motion:reduce){.a7.cf8 *{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important}}
+
+/* Accessible navigation regression fix: previews and real workspaces share a vertical desktop nav. */
+.a7.cf8 .cf8-preview-identification{display:grid;gap:7px;margin:2px 8px 17px;padding:12px 10px;border:1px solid #426b50;border-radius:9px;background:#1f3e30;color:#d8f89a;font-size:9px;font-weight:900;letter-spacing:.1em}
+.a7.cf8 .cf8-preview-identification>a{display:inline-flex;align-items:center;gap:6px;color:#f4f8ed;font-size:11px;font-weight:700;letter-spacing:0;text-decoration:underline;text-underline-offset:3px}
+@media(min-width:701px){
+ .a7.cf8 .sidebar nav{flex-direction:column!important;align-items:stretch!important}
+ .a7.cf8 .sidebar nav .cf8-nav-item{flex:0 0 auto!important;width:100%!important;min-width:0!important;justify-content:flex-start!important}
+ .a7.cf8 .sidebar nav .cf8-mobile-more-button{display:none!important}
+}
+@media(min-width:701px) and (max-width:920px){.a7.cf8 .cf8-preview-identification{display:none}}
+@media(max-width:700px){
+ .a7.cf8 .cf8-preview-identification{display:none}
+ .a7.cf8 .sidebar nav{flex-direction:row!important;justify-content:space-between!important;align-items:center!important;overflow:hidden!important;gap:3px!important}
+ .a7.cf8 .sidebar nav .cf8-nav-item:nth-child(n+5){display:none!important}
+ .a7.cf8 .sidebar nav .cf8-nav-item{display:flex!important;flex:1 1 0!important;min-width:0!important;width:0!important;max-width:none!important;padding:3px 2px!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:3px!important;height:49px!important;font-size:10px!important}
+ .a7.cf8 .sidebar nav .cf8-nav-item .nav-index{display:none!important}
+ .a7.cf8 .sidebar nav .cf8-nav-item>span:last-of-type{display:block!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;max-width:100%;text-align:center;font-size:10px!important}
+ .a7.cf8 .sidebar nav .cf8-mobile-more-button{display:flex!important;flex:0 0 52px!important;width:52px!important;min-width:52px!important;max-width:52px!important;justify-content:center!important;padding:4px!important;gap:2px!important}
+}

@@ -1,0 +1,55 @@
+{
+  "redirects": [
+    {
+      "source": "/dev/",
+      "destination": "/dev",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/dev",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/design",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/guest",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/owner",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/manager",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/desk",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/supervisor",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/cleaner",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/technician",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/reset-password",
+      "destination": "/reset-password.html"
+    },
+    {
+      "source": "/parallel",
+      "destination": "/parallel.html"
+    }
+  ]
+}

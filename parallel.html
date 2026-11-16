@@ -1,0 +1,39 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Parallel Accounts — CasaFlow</title>
+<style>
+:root{color-scheme:light;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:#172529;background:#f6f8f7}*{box-sizing:border-box}body{margin:0}main{max-width:1060px;margin:0 auto;padding:46px 24px 70px}header{display:flex;align-items:center;justify-content:space-between;gap:18px}.brand{font-size:15px;font-weight:800;letter-spacing:.08em;color:#216b59}.brand span{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:12px;background:#216b59;color:white;margin-right:10px}.pill{font-size:12px;background:#e6f0ea;color:#20694b;padding:7px 12px;border-radius:99px;font-weight:700}h1{font-size:clamp(30px,5vw,46px);line-height:1.12;letter-spacing:-.045em;max-width:670px;margin:48px 0 13px}p.lead{font-size:16px;line-height:1.7;color:#64726f;margin:0 0 27px;max-width:760px}.tip{padding:18px 21px;border:1px solid #d8e2dc;background:#fff;border-radius:15px;font-size:14px;color:#47605a;line-height:1.55;margin:0 0 26px}.tip strong{color:#1d4d40}.toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:22px}.action{cursor:pointer;background:#216b59;color:#fff;border:1px solid #216b59;padding:12px 20px;border-radius:10px;font-weight:700;font-size:14px;text-decoration:none}.action:hover{background:#185442}.secondary{background:#fff;color:#216b59;border-color:#cadbd1}.secondary:hover{background:#edf4ef}.subtle{color:#65746d;font-size:13px}.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.card{border:1px solid #dde5e0;background:#fff;border-radius:16px;padding:20px;box-shadow:0 5px 30px #10231808;min-width:0}.cardhead{display:flex;align-items:center;gap:11px;margin-bottom:12px}.icon{width:39px;height:39px;background:#edf4f0;border-radius:10px;display:grid;place-items:center;color:#216b59;font-weight:800}.title{font-size:16px;font-weight:750}.desc{font-size:12px;color:#778682;margin-top:2px}.email{font-size:13px;word-break:break-all;display:block;color:#54655d;background:#f5f8f6;padding:11px 12px;border-radius:9px;margin:14px 0 14px}.buttons{display:flex;gap:10px}.buttons a,.buttons button{flex:1;text-align:center;font-size:13px;padding:10px 9px}.buttons button{font:inherit;font-size:13px}.foot{color:#6c7c74;font-size:13px;margin-top:25px;line-height:1.7}.status{font-size:13px;color:#216b59;min-height:1.3em}a.textlink{color:#206b55;text-decoration:none;font-weight:700}@media(max-width:720px){main{padding:23px 15px 40px}.cards{grid-template-columns:1fr}.toolbar{align-items:stretch}.action{display:inline-flex;align-items:center;justify-content:center}}
+</style></head><body><main><header><div class="brand"><span>C</span>CASAFLOW</div><div class="pill">Staff QA workspace</div></header>
+<h1>Test every hotel account at the same time.</h1><p class="lead">Open a separate tab for each role, sign in once, and switch between Owner, Manager, Front Desk, Supervisor, Housekeeping, and Maintenance without signing out of anyone else.</p>
+<div class="tip"><strong>Independent sessions, shared hotel data.</strong> Each tab uses its own private Supabase login storage. One staff member's sign-in or sign-out won't replace the login in another tab. All eight roles still use the same live hotel and database permissions.</div>
+<div class="toolbar"><button class="action" id="openAll" type="button">Open all 8 tabs</button><a class="action secondary" href="/">Normal CasaFlow login</a><span class="subtle">If your browser blocks bulk tabs, open the roles individually below.</span></div>
+<div class="cards" id="cards"></div><p class="status" id="status" aria-live="polite"></p><p class="foot">Security note: This is a testing convenience, not a permission bypass. Each role still requires its own verified email and password. Parallel-test logins are kept only within their tab's session; use the normal login page for your everyday persistent Owner session.</p>
+</main><script>
+const accounts=[
+ {role:'Owner',detail:'Hotel-wide operations',email:'raghav007ff@gmail.com',path:'/owner',icon:'O'},
+ {role:'Manager',detail:'Operations and staffing',email:'raghav007ff+casaflow-manager@gmail.com',path:'/manager',icon:'M'},
+ {role:'Reception',detail:'Front desk',email:'raghav007ff+casaflow-desk@gmail.com',path:'/desk',icon:'F'},
+ {role:'Supervisor',detail:'Inspection & shift oversight',email:'raghav007ff+casaflow-supervisor@gmail.com',path:'/supervisor',icon:'S'},
+ {role:'Cleaner 1',detail:'Housekeeping',email:'raghav007ff+casaflow-cleaner1@gmail.com',path:'/cleaner',icon:'H'},
+ {role:'Cleaner 2',detail:'Housekeeping',email:'raghav007ff+casaflow-cleaner2@gmail.com',path:'/cleaner',icon:'H'},
+ {role:'AC Technician',detail:'Maintenance',email:'raghav007ff+casaflow-ac@gmail.com',path:'/technician',icon:'T'},
+ {role:'Plumbing Technician',detail:'Maintenance',email:'raghav007ff+casaflow-plumbing@gmail.com',path:'/technician',icon:'T'}
+];
+const url=a=>a.path+'?parallel=1';
+const cards=document.getElementById('cards');
+accounts.forEach((a,index)=>{
+ const card=document.createElement('article');card.className='card';
+ const head=document.createElement('div');head.className='cardhead';
+ const icon=document.createElement('div');icon.className='icon';icon.textContent=a.icon;
+ const h=document.createElement('div');const title=document.createElement('div');title.className='title';title.textContent=a.role;
+ const desc=document.createElement('div');desc.className='desc';desc.textContent=a.detail;h.append(title,desc);head.append(icon,h);
+ const email=document.createElement('code');email.className='email';email.textContent=a.email;
+ const buttons=document.createElement('div');buttons.className='buttons';
+ const launch=document.createElement('a');launch.className='action';launch.href=url(a);launch.target='_blank';launch.rel='noopener noreferrer';launch.textContent='Open '+a.role;
+ const copy=document.createElement('button');copy.className='action secondary';copy.type='button';copy.textContent='Copy email';copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(a.email);copy.textContent='Copied';setTimeout(()=>copy.textContent='Copy email',1500)}catch{copy.textContent=a.email}});
+ buttons.append(launch,copy);card.append(head,email,buttons);cards.append(card);
+});
+document.getElementById('openAll').addEventListener('click',()=>{
+ // Browsers may block some windows. Each individual role link above is the reliable fallback.
+ for(const a of accounts)window.open(url(a),'_blank','noopener,noreferrer');
+ document.getElementById('status').textContent='Tabs requested. If fewer than eight open, allow pop-ups for CasaFlow or click the individual role links.';
+});
+</script></body></html>

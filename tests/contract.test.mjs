@@ -1,0 +1,11 @@
+import test from 'node:test';import assert from 'node:assert/strict';import{readFileSync}from'node:fs';
+const sql=readFileSync(new URL('../supabase/schema.sql',import.meta.url),'utf8');
+const app=readFileSync(new URL('../src/main.tsx',import.meta.url),'utf8');
+const permissions=['hotels','memberships','rooms','tasks','activity','messages','staff_invites','guest_passes'];
+test('every tenant table has RLS enabled',()=>{for(const n of permissions)assert.ok(sql.includes(`'${n}'`),'Missing RLS: '+n);assert.match(sql,/enable row level security/)});
+test('state changes only through approved RPC and no direct writes in React',()=>{assert.doesNotMatch(app,/\.from\(['"](?:rooms|tasks|memberships)['"]\)\.(?:update|delete|insert|upsert)/)});
+test('optimistic version checks on rooms and tasks',()=>{assert.match(sql,/r\.version<>p_expected_version/);assert.match(sql,/t\.version<>p_expected_version/);assert.match(sql,/for update/)});
+test('checkout also creates cleaning and revokes old guest passes',()=>{assert.match(sql,/create or replace function public.checkout_room/);assert.match(sql,/insert into public.tasks\(hotel_id,room_id,kind,title/);assert.match(sql,/update public.guest_passes set revoked_at/)});
+test('guest token stored hashed and limited',()=>{assert.match(sql,/digest\(token,'sha256'\)/);assert.match(sql,/last_request_at>now\(\)-interval '30 seconds'/)});
+test('live events trigger full authorized resync',()=>{assert.match(app,/postgres_changes/);assert.match(app,/refreshRef.current\(\)/)});
+test('permissions keep invites owner/manager only',()=>{assert.match(sql,/create or replace function public.create_staff_invite/);assert.match(sql,/\['owner','manager'\]/)});

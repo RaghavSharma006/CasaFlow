@@ -1,0 +1,10 @@
+import test from 'node:test';import assert from 'node:assert/strict';import{readFileSync}from'node:fs';
+const root=new URL('../',import.meta.url);const app=readFileSync(new URL('src/main.tsx',root),'utf8');
+const sql=readFileSync(new URL('supabase/20261115_bulk_rooms.sql',root),'utf8');
+const dev=readFileSync(new URL('src/demo.tsx',root),'utf8');
+const db=readFileSync(new URL('src/db.ts',root),'utf8');
+test('bulk insert server-side and idempotent under duplicate requests',()=>{assert.match(sql,/generate_series\(p_start,p_end\)/);assert.match(sql,/on conflict\(hotel_id,number\) do nothing/);assert.match(sql,/can_role\(p_hotel,array\['owner','manager'\]/);assert.match(sql,/2000/);});
+test('room board renders bounded items per floor and status',()=>{const board=readFileSync(new URL('src/CasaRoomBoard.tsx',root),'utf8');const overview=readFileSync(new URL('src/CasaOverview.tsx',root),'utf8');assert.match(board,/items\.slice\(0,limits\[f\]\|\|100\)/);assert.match(board,/items\.slice\(0,limits\[s\]\|\|30\)/);assert.match(overview,/floors\.slice\(0,expanded\?8:2\)/);assert.match(overview,/list\.slice\(0,10\)/);});
+test('bulk input validation keeps UI bounded',()=>{assert.match(app,/total<=2000/);assert.match(app,/bulk_add_rooms/);});
+test('dev sandbox isolates fake role personas from production db',()=>{assert.match(dev,/SAMPLE DATA ONLY/);assert.match(dev,/length:1000/);assert.doesNotMatch(dev,/\bdb\./);assert.match(app,/location\.pathname==='\/dev'/);});
+test('realtime refresh debounces queries',()=>{assert.match(app,/inFlight\.current/);assert.match(app,/setTimeout\(\(\)=>refreshRef\.current\(\),450\)/);assert.match(db,/Promise\.all/);});

@@ -1,0 +1,15 @@
+import test from 'node:test';import assert from 'node:assert/strict';import{readFileSync}from 'node:fs';
+const root=new URL('../',import.meta.url);
+const sql=readFileSync(new URL('supabase/20261115_role_portals_and_private_inbox.sql',root),'utf8');
+const app=readFileSync(new URL('src/main.tsx',root),'utf8');
+const demo=readFileSync(new URL('src/demo.tsx',root),'utf8');
+const db=readFileSync(new URL('src/db.ts',root),'utf8');
+const vercel=JSON.parse(readFileSync(new URL('vercel.json',root),'utf8'));
+test('each role has an app route (server decides actual role)',()=>{for(const path of ['/owner','/manager','/desk','/supervisor','/cleaner','/technician'])assert.ok(vercel.rewrites.some(x=>x.source===path&&x.destination==='/index.html'));assert.match(app,/myMember\.role/)});
+test('cleaner and maintenance lose manager-only navigation',()=>{assert.match(app,/role==='housekeeping'\?\['overview','cleaning','messages'\]/);assert.match(app,/\['overview','maintenance','messages'\]/)});
+test('private messages require sender membership and recipient role',()=>{assert.match(sql,/app_private\.can_access\(hotel_id\)/);assert.match(sql,/thread_user_id\s*=\s*\(select auth\.uid\(\)\)/);assert.match(sql,/recipient_kind='owner'/);assert.match(sql,/recipient_kind='frontdesk'/);assert.match(sql,/p_thread_user/);assert.match(sql,/Private thread forbidden/)});
+test('data reads are role-scoped in Postgres, not just React',()=>{assert.match(sql,/create policy tasks_read/);assert.match(sql,/create policy rooms_read/);assert.match(sql,/create policy activity_read/);assert.match(sql,/assigned_to=\(select auth\.uid\(\)\)/)});
+test('worker cannot advance another worker task',()=>{assert.match(sql,/Not your assigned task/);assert.match(sql,/Assignment forbidden/)});
+test('one common chat; recipient messages stored separately',()=>{assert.match(sql,/p_room is not null then raise exception/);assert.match(app,/chatMode==='common'/);assert.match(db,/private_messages/);assert.match(app,/send_private_message/)});
+test('dev profiles simulate separate inboxes and can switch roles',()=>{assert.match(demo,/visibleMsgs/);assert.match(demo,/threadRole/);assert.match(demo,/setRole\(e.target.value as Role\)/)});
+test('chat events avoid re-fetching every room on each message',()=>{assert.match(app,/function scheduleChat\(\)/);assert.match(app,/setTimeout\(\(\)=>refreshChatRef\.current\(\),180\)/);assert.match(app,/await refreshChats\(\)/)});
