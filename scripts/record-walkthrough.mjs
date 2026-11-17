@@ -63,14 +63,15 @@ async function login(page, email, password, roleName) {
   await page.waitForTimeout(1800);
   note(`${roleName} sign-in`, 'PASS', 'authenticated dashboard rendered');
 }
-async function closeRecordedSession(session, videoName) {
+async function closeRecordedSession(session, videoName, extraPages = []) {
   await saveCheckpoint(session.page, `${session.label}-final`);
   await session.context.tracing.stop({ path: path.join(outDir, `${session.label}-trace.zip`) }).catch(() => {});
-  const video = session.page.video();
+  const videos = [session.page, ...extraPages].map(page => page.video()).filter(Boolean);
   await session.context.close();
-  if (video) {
-    const source = await video.path().catch(() => null);
-    if (source) await fs.copyFile(source, path.join(outDir, videoName)).catch(() => {});
+  for (let index = 0; index < videos.length; index++) {
+    const source = await videos[index].path().catch(() => null);
+    const name = index === 0 ? videoName : videoName.replace('.webm', `-guest-${index}.webm`);
+    if (source) await fs.copyFile(source, path.join(outDir, name)).catch(() => {});
   }
 }
 async function safeClick(page, patterns) {
@@ -87,6 +88,7 @@ async function safeClick(page, patterns) {
 let frontdesk;
 let manager;
 let worker;
+let guestPage;
 try {
   // 1. Front Desk: sign in and create a room QR for the demo room.
   frontdesk = await contextFor('01-frontdesk-and-guest');
@@ -108,7 +110,7 @@ try {
   await saveCheckpoint(frontdesk.page, '02-room-qr-generated');
 
   // 2. Guest: submit a broken-AC complaint. This should route to Maintenance.
-  const guestPage = await frontdesk.context.newPage();
+  guestPage = await frontdesk.context.newPage();
   guestPage.setDefaultTimeout(15000);
   guestPage.on('pageerror', error => failures.push(`Guest: pageerror: ${error.message}`));
   await guestPage.goto(guestUrl, { waitUntil: 'domcontentloaded' });
@@ -163,7 +165,7 @@ try {
 } finally {
   if (worker) await closeRecordedSession(worker, '03-worker.webm');
   if (manager) await closeRecordedSession(manager, '02-manager.webm');
-  if (frontdesk) await closeRecordedSession(frontdesk, '01-frontdesk-and-guest.webm');
+  if (frontdesk) await closeRecordedSession(frontdesk, '01-frontdesk-and-guest.webm', guestPage ? [guestPage] : []);
   await browser.close();
   const report = {
     runId, baseUrl: BASE_URL, startedAt: new Date().toISOString(),
