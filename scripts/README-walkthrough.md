@@ -29,7 +29,7 @@ npm run record:walkthrough
 
 The default demo email addresses are already set in the script. Override them with `MANAGER_EMAIL` or `FRONTDESK_EMAIL` if your demo accounts differ.
 
-Use `CASAFLOW_BASE_URL` to point at an isolated staging deployment instead of production. The production mutation guard is intentional: this walkthrough creates a guest request and generates a room QR, so only run it against a demo hotel with demo accounts. Never commit passwords or a populated `.env.local`.
+Use `CASAFLOW_BASE_URL` to point at an isolated staging deployment instead of production. The production mutation guard is intentional: this walkthrough creates a guest request and generates a room QR, so only run it against a demo hotel with demo accounts. Never commit passwords or a populated `.env.local`; the recorder reads credentials from the shell environment.
 
 ## Output
 
