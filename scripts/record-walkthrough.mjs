@@ -128,7 +128,8 @@ try {
   await saveCheckpoint(manager.page, '04-manager-dashboard');
   const requestsOpened = await safeClick(manager.page, [/guest requests/i, /^requests$/i]);
   if (!requestsOpened) throw new Error('Manager dashboard did not expose Guest Requests.');
-  await manager.page.getByText(new RegExp(runId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))).first().waitFor({ state: 'visible', timeout: 25000 });
+  await manager.page.locator('input[placeholder*="Search"]').fill(runId);
+  await manager.page.getByText(runId, { exact: false }).first().waitFor({ state: 'visible', timeout: 25000 });
   note('Manager receives guest complaint', 'PASS', 'unique test request is visible in Manager workspace');
   await saveCheckpoint(manager.page, '05-manager-guest-request');
 
@@ -147,11 +148,10 @@ try {
     : HOUSEKEEPING_EMAIL && HOUSEKEEPING_PASSWORD
       ? { email: HOUSEKEEPING_EMAIL, password: HOUSEKEEPING_PASSWORD, role: 'Housekeeping' }
       : null;
-  if (workerEmail && workerPassword) {
+  if (workerCredentials) {
     worker = await contextFor('03-worker');
-    await login(worker.page, workerEmail, workerPassword, workerRole);
+    await login(worker.page, workerCredentials.email, workerCredentials.password, workerCredentials.role);
     await saveCheckpoint(worker.page, '07-worker-dashboard');
-    await worker.page.getByText(new RegExp(runId.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&'))).first().waitFor({ state: 'visible', timeout: 20000 }).catch(() => null);
     note(`${workerRole} queue inspection`, 'PASS', 'worker dashboard captured; inspect the video/report to confirm the routed task appears');
   } else {
     note('Worker queue inspection', 'SKIP', 'set MAINTENANCE_EMAIL/PASSWORD or HOUSEKEEPING_EMAIL/PASSWORD to record a worker session');
