@@ -152,7 +152,8 @@ try {
     worker = await contextFor('03-worker');
     await login(worker.page, workerCredentials.email, workerCredentials.password, workerCredentials.role);
     await saveCheckpoint(worker.page, '07-worker-dashboard');
-    note(`${workerRole} queue inspection`, 'PASS', 'worker dashboard captured; inspect the video/report to confirm the routed task appears');
+    await worker.page.getByText(runId, { exact: false }).first().waitFor({ state: 'visible', timeout: 20000 });
+    note(`${workerCredentials.role} queue inspection`, 'PASS', 'unique walkthrough request is visible in the worker workspace');
   } else {
     note('Worker queue inspection', 'SKIP', 'set MAINTENANCE_EMAIL/PASSWORD or HOUSEKEEPING_EMAIL/PASSWORD to record a worker session');
   }
