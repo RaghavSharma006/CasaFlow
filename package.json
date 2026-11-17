@@ -7,7 +7,8 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "record:walkthrough": "node scripts/record-walkthrough.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.97.0",
@@ -22,6 +23,7 @@
     "@types/qrcode": "1.5.5",
     "typescript": "5.8.3",
     "vite": "6.4.6",
-    "@vitejs/plugin-react": "4.7.0"
+    "@vitejs/plugin-react": "4.7.0",
+    "playwright": "^1.56.1"
   }
 }
