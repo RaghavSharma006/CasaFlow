@@ -142,9 +142,11 @@ try {
   }
 
   // 4. Optional worker sessions prove the automatic queue handoff without manual assignment.
-  const workerEmail = MAINTENANCE_EMAIL || HOUSEKEEPING_EMAIL;
-  const workerPassword = MAINTENANCE_PASSWORD || HOUSEKEEPING_PASSWORD;
-  const workerRole = MAINTENANCE_EMAIL ? 'Maintenance' : 'Housekeeping';
+  const workerCredentials = MAINTENANCE_EMAIL && MAINTENANCE_PASSWORD
+    ? { email: MAINTENANCE_EMAIL, password: MAINTENANCE_PASSWORD, role: 'Maintenance' }
+    : HOUSEKEEPING_EMAIL && HOUSEKEEPING_PASSWORD
+      ? { email: HOUSEKEEPING_EMAIL, password: HOUSEKEEPING_PASSWORD, role: 'Housekeeping' }
+      : null;
   if (workerEmail && workerPassword) {
     worker = await contextFor('03-worker');
     await login(worker.page, workerEmail, workerPassword, workerRole);
