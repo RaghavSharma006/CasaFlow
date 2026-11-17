@@ -19,7 +19,7 @@ const failures = [];
 const results = [];
 
 if (!MANAGER_PASSWORD || !FRONTDESK_PASSWORD) {
-  console.error('Missing MANAGER_PASSWORD and/or FRONTDESK_PASSWORD. Set them in your shell/.env.local; never commit passwords.');
+  console.error('Missing MANAGER_PASSWORD and/or FRONTDESK_PASSWORD. Set them in your shell; never commit passwords.');
   process.exit(2);
 }
 if (production && process.env.E2E_ALLOW_PRODUCTION_MUTATIONS !== '1') {
@@ -113,6 +113,8 @@ try {
   guestPage = await frontdesk.context.newPage();
   guestPage.setDefaultTimeout(15000);
   guestPage.on('pageerror', error => failures.push(`Guest: pageerror: ${error.message}`));
+  guestPage.on('console', msg => { if (msg.type() === 'error') failures.push(`Guest: console: ${msg.text()}`); });
+  guestPage.on('requestfailed', req => failures.push(`Guest: request failed: ${req.method()} ${req.url()} — ${req.failure()?.errorText || ''}`));
   await guestPage.goto(guestUrl, { waitUntil: 'domcontentloaded' });
   await guestPage.getByRole('heading', { name: /how can we help/i }).waitFor({ state: 'visible' });
   await guestPage.locator('label.guest-choice').filter({ hasText: 'Broken AC' }).click();
