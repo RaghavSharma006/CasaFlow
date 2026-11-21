@@ -1,0 +1,23 @@
+name: Clean up expired CasaFlow demo workspaces
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Revoke expired demo users and remove demo hotels
+        env:
+          DEMO_CLEANUP_SECRET: ${{ secrets.CASAFLOW_DEMO_CRON_SECRET }}
+        run: |
+          test -n "$DEMO_CLEANUP_SECRET"
+          curl --fail --silent --show-error --max-time 25 \
+            -H "Authorization: Bearer $DEMO_CLEANUP_SECRET" \
+            "https://hotel-ops-pilot.vercel.app/api/demo/cleanup"
