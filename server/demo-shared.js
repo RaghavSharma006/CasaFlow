@@ -36,7 +36,7 @@ export function assertSameOrigin(req) {
   try {
     const parsed = new URL(origin);
     const forwardedProto = String(req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim();
-    const expectedProtocol = forwardedProto === 'http' && /^(localhost|127\.0\.0\.1)(:\\d+)?$/.test(host) ? 'http:' : 'https:';
+    const expectedProtocol = forwardedProto === 'http' && /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host) ? 'http:' : 'https:';
     return parsed.host === host && parsed.protocol === expectedProtocol;
   } catch { return false; }
 }
