@@ -71,7 +71,7 @@ test('demo mode is enabled only by the secure per-tab demo launcher marker',()=>
  assert.match(launcher,/sessionStorage\.setItem\('casaflow-demo-session','1'\)/);
 });
 test('demo sessions never start or expire a staff shift',()=>{
- assert.match(main,/!parallelMode&&!demoMode&&shift\?\.shift_started_at/);
+ assert.match(main,/const shiftExpired=!parallelMode&&!demoMode/);
  assert.match(main,/!parallelMode&&!demoMode&&!shift\?\.shift_started_at/);
  assert.match(main,/!hotel\|\|!shiftEnd\|\|parallelMode\|\|demoMode\)return/);
  assert.match(main,/demoMode\?\(lang==='en'\?'Demo workspace'/);
