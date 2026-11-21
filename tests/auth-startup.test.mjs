@@ -39,7 +39,7 @@ test('successful signup sessions also immediately enter the authenticated app',(
 
 test('setup is shown only after membership lookup confirms no active membership',()=>{
  assert.match(main,/membershipState==='none'\)return <Onboard/);
- assert.match(main,/setMembershipState\('ready'\);[\s\S]*?memberships:memberships as Member\[\]/);
+ assert.match(main,/setMembershipState\('ready'\);[\s\S]*?setData\(d=>\(\{\.\.\.d,memberships\}\)\)/);
  assert.doesNotMatch(main,/if\(!hotel\|\|!myMember\)return <Onboard/);
 });
 test('workspace query errors cannot route an existing member into onboarding',()=>{
