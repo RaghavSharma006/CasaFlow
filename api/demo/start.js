@@ -1,4 +1,4 @@
-import { adminClient, activeSession, assertSameOrigin, clientIp, cookieHeader, DEMO_ROLES, DEMO_TTL_SECONDS, hashSecret, json, randomSecret, readCookie, verifyTurnstile } from './_shared.js';
+import { adminClient, activeSession, assertSameOrigin, clientIp, cookieHeader, DEMO_ROLES, DEMO_TTL_SECONDS, hashSecret, json, randomSecret, readCookie, verifyTurnstile } from '../../server/demo-shared.js';
 
 function userSpecs(sessionId) {
   return Object.entries(DEMO_ROLES).map(([roleKey,meta]) => ({
