@@ -1,4 +1,4 @@
-import { adminClient, constantTimeEqual, json } from './_shared.js';
+import { adminClient, constantTimeEqual, json } from '../../server/demo-shared.js';
 
 export default async function handler(req,res) {
   if(req.method!=='GET') return json(res,405,{error:'Method not allowed.'});
