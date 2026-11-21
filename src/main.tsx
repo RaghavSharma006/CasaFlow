@@ -112,30 +112,23 @@ function App(){
     if(valid!==selectedHotel){hotelRef.current=valid;setHotel(valid);hotelStorage.setItem('casaflow-hotel',valid!)}
     let next=await queryData(valid!,{memberships,includeChats:false});
     let shift=next.staffDispatch.find(d=>d.user_id===session.user.id&&d.hotel_id===valid);
-    const shiftExpired=!parallelMode&&!demoMode&&Boolean(shift?.shift_started_at&&(!shift.on_shift||!shift.shift_ends_at||Date.parse(shift.shift_ends_at)<=Date.now()));
-    // A fresh password sign-in is allowed to begin the next shift. The
-    // database verifies auth freshness and rebalances queued work atomically.
-    // Refresh after the RPC so reassigned tasks appear on this device at once.
-    if(shiftExpired){
+    const workerRole=memberships.find(m=>m.user_id===session.user.id)?.role;
+    const isShiftWorker=workerRole==='housekeeping'||workerRole==='maintenance'||workerRole==='frontdesk'||workerRole==='supervisor';
+    const shiftInactive=!parallelMode&&!demoMode&&isShiftWorker&&(!shift?.on_shift||!shift.shift_ends_at||Date.parse(shift.shift_ends_at)<=Date.now());
+    // Start or renew the worker shift before showing the queue. The database
+    // performs dispatch in the same transaction; reload so the UI sees owners.
+    if(shiftInactive){
      try{
       await rpc('begin_work_shift',{p_hotel:valid!});
       next=await queryData(valid!,{memberships,includeChats:false});
       shift=next.staffDispatch.find(d=>d.user_id===session.user.id&&d.hotel_id===valid);
      }catch(err:any){
-      await db.auth.signOut();
-      setSession(null);setHotel(null);hotelRef.current=null;hotelStorage.removeItem('casaflow-hotel');
-      notify(err?.message||'Please sign in again to start your next shift.');
-      return;
+      const message=err?.message||'Could not start your work shift. Use Start shift to retry.';
+      setLastError(message);notify(message);
      }
     }
-    // Paint the workspace before starting a first-ever shift.
-    setData(next);setLastSync(Date.now());setLastError('');setSync('live');
-    if(!parallelMode&&!demoMode&&!shift?.shift_started_at){
-     void rpc('begin_work_shift',{p_hotel:valid!}).catch(err=>{
-      const message=err?.message||'Could not start your work shift';
-      setLastError(message);notify(message);
-     });
-    }
+    setData(next);setLastSync(Date.now());setSync('live');
+    setLastError(shiftInactive&&!shift?.on_shift?'Your shift is not active. Start your shift to receive and claim jobs.':'');
   }catch(err:any){setMembershipState(current=>current==='ready'?'ready':'error');setSync('offline');setLastError(err.message||String(err));notify(err.message||String(err))}})();
   inFlight.current=request;
   try{await request;}finally{
@@ -233,8 +226,22 @@ function App(){
  };
  const mutate=(name:string,params:Record<string,unknown>)=>action(()=>rpc(name,params));
  const manualRefresh=async()=>{if(refreshing)return;setRefreshing(true);setSync('connecting');setLastError('');try{await load()}finally{setRefreshing(false)}};
+ const shiftActive=demoMode||Boolean(currentShift?.on_shift&&currentShift.shift_ends_at&&Date.parse(currentShift.shift_ends_at)>Date.now());
+ const startShift=async()=>{if(busy||!hotel)return;setBusy(true);setLastError('');try{await rpc('begin_work_shift',{p_hotel:hotel});await load();notify(lang==='en'?'Your shift is active. Jobs are being assigned.':'Turno activo. Asignando tareas.')}catch(e:any){setLastError(e.message||'Could not start your shift');notify(e.message||'Could not start your shift')}finally{setBusy(false)}};
+ const claimTask=async(task:Task)=>{setWorkingId(task.id);try{await rpc('claim_department_task',{p_hotel:hotel,p_task:task.id,p_expected_version:task.version});await load();notify(lang==='en'?'Task added to your work queue':'Tarea añadida a tu cola')}catch(e:any){notify(e.message||t.error);await load()}finally{setWorkingId(null)}};
  const advance=async(task:Task)=>{setWorkingId(task.id);try{await mutate(task.kind==='guest'?(task.status==='open'?'accept_guest_request':'complete_guest_request'):'advance_task',{p_hotel:hotel,p_task:task.id,p_expected_version:task.version,...(task.kind==='guest'?{}:{p_assignee:null})})}finally{setWorkingId(null)}};
  const taskButton=(task:Task)=>task.kind==='guest'?(task.status==='open'?(lang==='en'?'Accept request':'Aceptar solicitud'):(lang==='en'?'Complete request':'Completar solicitud')):task.kind==='cleaning'?(task.status==='open'?t.start:task.status==='doing'?t.inspect:t.approve):(task.status==='open'?t.start:t.complete);
+ const mayClaim=(task:Task)=>{
+  if(!shiftActive||task.status!=='open'||task.assigned_to!==null)return false;
+  const guest=data.guestMeta.find(g=>g.task_id===task.id);
+  if(task.kind==='guest'){
+   if(!guest||guest.department!==role)return false;
+   if(role==='maintenance'&&guest.category==='broken_ac'&&!currentShift?.verified_skills.includes('ac'))return false;
+   if(role==='maintenance'&&guest.category==='plumbing'&&!currentShift?.verified_skills.includes('plumbing'))return false;
+   return role==='maintenance'||role==='housekeeping'||role==='frontdesk';
+  }
+  return role==='housekeeping'?['cleaning','supply','damage'].includes(task.kind):role==='maintenance'?['maintenance','damage'].includes(task.kind):false;
+ };
  const mayAdvance=(task:Task)=>{
   if(task.status==='done'||task.status==='cancelled')return false;
   if(task.kind==='guest')return task.status==='doing'?task.assigned_to===session?.user?.id||['owner','manager'].includes(role):task.assigned_to===session?.user?.id;
@@ -244,7 +251,7 @@ function App(){
   if(role==='housekeeping')return ['cleaning','supply','damage'].includes(task.kind)&&task.status!=='inspection';
   return ['maintenance','damage'].includes(task.kind);
  };
- const taskCards=(tasks:Task[])=>tasks.length?<div className="tasklist">{tasks.map(k=>{const rm=data.rooms.find(r=>r.id===k.room_id);const assignee=data.memberships.find(m=>m.user_id===k.assigned_to);const disabled=k.status==='done'||k.status==='cancelled';const guest=data.guestMeta.find(g=>g.task_id===k.id);const blockedStart=k.kind==='cleaning'&&k.status==='open'&&rm?.status==='blocked';return <div className="taskrow" key={k.id}><div className={'kindicon kind-'+k.kind}>{k.kind==='cleaning'?<Brush/>:k.kind==='guest'?<HandPlatter/>:k.kind==='supply'?<PackageMinus/>:<Wrench/>}</div><div className="taskbody"><div className="tasktitle">{k.title} <Pill tone={'priority-'+k.priority}>{k.priority}</Pill>{guest?.escalated_at&&k.status==='open'&&<Pill tone="priority-high">{lang==='en'?'Needs management':'Necesita gerencia'}</Pill>}</div><div className="taskmeta">{t.room} {rm?.number||'—'} <span>·</span> {kindTitle(k.kind,t)} <span>·</span> {assignee?.display_name||t.unassigned}</div>{k.detail&&<div className="taskdetail">{k.detail}</div>}</div><div className="taskright"><Pill tone={statusTone(k.status)}>{t[k.status]}</Pill>{!disabled&&mayAdvance(k)&&<><button className="smallbtn" disabled={busy||blockedStart} title={blockedStart?'Management must release this blocked room before cleaning can start':undefined} onClick={()=>void advance(k)}>{workingId===k.id?<RefreshCw size={14} className="wf-spin"/>:null}{taskButton(k)} <ArrowRight size={14}/></button>{blockedStart&&<small className="wf-blocked-reason">Room blocked. Ask management to release it for cleaning.</small>}</>}</div></div>})}</div>:<div className="empty"><CheckCircle2 size={24}/><p>{t.noTasks}</p></div>;
+ const taskCards=(tasks:Task[])=>tasks.length?<div className="tasklist">{tasks.map(k=>{const rm=data.rooms.find(r=>r.id===k.room_id);const assignee=data.memberships.find(m=>m.user_id===k.assigned_to);const disabled=k.status==='done'||k.status==='cancelled';const guest=data.guestMeta.find(g=>g.task_id===k.id);const blockedStart=k.kind==='cleaning'&&k.status==='open'&&rm?.status==='blocked';return <div className="taskrow" key={k.id}><div className={'kindicon kind-'+k.kind}>{k.kind==='cleaning'?<Brush/>:k.kind==='guest'?<HandPlatter/>:k.kind==='supply'?<PackageMinus/>:<Wrench/>}</div><div className="taskbody"><div className="tasktitle">{k.title} <Pill tone={'priority-'+k.priority}>{k.priority}</Pill>{guest?.escalated_at&&k.status==='open'&&<Pill tone="priority-high">{lang==='en'?'Needs management':'Necesita gerencia'}</Pill>}</div><div className="taskmeta">{t.room} {rm?.number||'—'} <span>·</span> {kindTitle(k.kind,t)} <span>·</span> {assignee?.display_name||t.unassigned}</div>{k.detail&&<div className="taskdetail">{k.detail}</div>}</div><div className="taskright"><Pill tone={statusTone(k.status)}>{t[k.status]}</Pill>{!disabled&&mayAdvance(k)&&<><button className="smallbtn" disabled={busy||workingId===k.id||blockedStart} title={blockedStart?'Management must release this blocked room before cleaning can start':undefined} onClick={()=>void advance(k)}>{workingId===k.id?<RefreshCw size={14} className="wf-spin"/>:null}{taskButton(k)} <ArrowRight size={14}/></button>{blockedStart&&<small className="wf-blocked-reason">Room blocked. Ask management to release it for cleaning.</small>}</>}{!disabled&&mayClaim(k)&&<button className="smallbtn" disabled={busy||workingId===k.id} onClick={()=>void claimTask(k)}>{workingId===k.id?<RefreshCw size={14} className="wf-spin"/>:null}{lang==='en'?'Take task':'Tomar tarea'} <ArrowRight size={14}/></button>}</div></div>})}</div>:<div className="empty"><CheckCircle2 size={24}/><p>{t.noTasks}</p></div>;
  const navItems:{id:View,icon:React.ElementType}[]=[{id:'overview',icon:LayoutDashboard},{id:'rooms',icon:Columns3},{id:'cleaning',icon:Brush},{id:'maintenance',icon:Wrench},{id:'requests',icon:HandPlatter},{id:'team',icon:Users},{id:'messages',icon:MessageSquare},{id:'activity',icon:Activity},{id:'settings',icon:Settings}];
  if(location.pathname==='/design')return <AtelierPreview lang={lang} setLang={setLang} theme={theme} setTheme={setTheme}/>;
  if(location.pathname==='/dev')return <DevSandbox lang={lang} theme={theme} setLang={setLang} setTheme={setTheme}/>;
@@ -262,7 +269,7 @@ function App(){
  {view==='overview'&&role==='frontdesk'&&<div className="wf-view-banner"><strong>RECEPTION CONSOLE</strong> — Guest intake, room status and reception dispatch. Specialist repairs belong to management.</div>}
  {view==='overview'&&role==='manager'&&<div className="wf-view-banner"><strong>MANAGER OPERATIONS</strong> — Staff dispatch, escalations and team oversight.</div>}
  {view==='overview'&&role==='supervisor'&&<div className="wf-view-banner"><strong>HOUSEKEEPING SUPERVISOR</strong> — Cleaning approvals and inspections only.</div>}
- {view==='overview'&&<section className="card shift-card" aria-live="polite"><div><b>{demoMode?(lang==='en'?'Demo workspace':'Espacio de demostración'):(lang==='en'?'My automatic work shift':'Mi turno automático')}</b><small>{demoMode?(lang==='en'?'Demo mode is on · No shift expiry':'Modo demo activo · El turno no caduca'):shiftEnd?'Working since login · '+new Date(currentShift?.shift_started_at||'').toLocaleTimeString()+' · Shift ends '+new Date(shiftEnd).toLocaleTimeString():'Shift starts on sign-in and ends automatically.'}</small></div>{demoMode?<Pill tone="tone-ready">DEMO · ALWAYS ON</Pill>:<ShiftCountdown until={shiftEnd}/>}</section>}
+ {view==='overview'&&<section className="card shift-card" aria-live="polite"><div><b>{demoMode?(lang==='en'?'Demo workspace':'Espacio de demostración'):(lang==='en'?'My automatic work shift':'Mi turno automático')}</b><small>{demoMode?(lang==='en'?'Demo mode is on · No shift expiry':'Modo demo activo · El turno no caduca'):shiftEnd?'Working since login · '+new Date(currentShift?.shift_started_at||'').toLocaleTimeString()+' · Shift ends '+new Date(shiftEnd).toLocaleTimeString():'Shift starts on sign-in and ends automatically.'}</small></div>{demoMode?<Pill tone="tone-ready">DEMO · ALWAYS ON</Pill>:<div className="shift-actions"><ShiftCountdown until={shiftEnd}/>{['housekeeping','maintenance','frontdesk','supervisor'].includes(role)&&!shiftActive&&<button type="button" className="button primary" disabled={busy} onClick={()=>void startShift()}>{busy?'Starting…':lang==='en'?'Start shift':'Iniciar turno'}</button>}</div>}</section>}
  {view==='overview'&&(['housekeeping','maintenance'].includes(role)?<>
   <div className="stats"><Stat icon={<ClipboardCheck/>} label={lang==='en'?'My department queue':'Cola de mi departamento'} value={workerQueue.length} detail={lang==='en'?'Assigned + waiting jobs':'Tareas asignadas y en espera'}/><Stat icon={<Clock/>} label={t.open} value={workerQueue.filter(k=>k.status==='open').length} detail={t.pending}/><Stat icon={<Wrench/>} label={t.doing} value={workerQueue.filter(k=>k.status==='doing').length} detail={t.live}/><Stat icon={<CheckCircle2/>} label={t.done} value={data.tasks.filter(k=>k.assigned_to===session.user.id&&k.status==='done').length} detail={t.roomBoard}/></div>
   <section className="card"><div className="cardhead"><div><small>{roleLabel[role]}</small><h2>{lang==='en'?'My work queue':'Mis tareas pendientes'}</h2></div><Pill>{workerQueue.length}</Pill></div>{taskCards(workerQueue)}</section>
