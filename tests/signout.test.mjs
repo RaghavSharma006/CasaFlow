@@ -9,7 +9,7 @@ test('real app exposes a labeled sign-out button in header',()=>{
   assert.match(main,/onClick=\{\(\)=>void signOut\(\)\}/);
 });
 test('sign-out invokes Supabase, resets account and hotel session',()=>{
-  assert.match(main,/await db\.auth\.signOut\(\)/);
+  assert.match(main,/await db\.auth\.signOut\(parallelMode\?\{scope:'local'\}:undefined\)/);
   assert.match(main,/setSession\(null\);setHotel\(null\)/);
   assert.match(main,/hotelStorage\.removeItem\('casaflow-hotel'\)/);
 });
