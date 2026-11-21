@@ -43,7 +43,7 @@ test('setup is shown only after membership lookup confirms no active membership'
  assert.doesNotMatch(main,/if\(!hotel\|\|!myMember\)return <Onboard/);
 });
 test('a freshly authenticated worker can restart an expired shift and immediately reload rebalanced tasks',()=>{
- assert.match(main,/const shiftInactive=!parallelMode&&!demoMode&&isShiftWorker/);
+ assert.match(main,/const shiftInactive=!parallelMode&&isShiftWorker/);
  assert.match(main,/if\(shiftInactive\)\{[\s\S]*?await rpc\('begin_work_shift',\{p_hotel:valid!\}\);[\s\S]*?next=await queryData\(valid!,\{memberships,includeChats:false\}\)/);
 });
 test('workspace query errors cannot route an existing member into onboarding',()=>{
@@ -70,9 +70,9 @@ test('demo mode is enabled only by the secure per-tab demo launcher marker',()=>
  assert.match(launcher,/if\(result\.demo_mode!==true\)throw new Error/);
  assert.match(launcher,/sessionStorage\.setItem\('casaflow-demo-session','1'\)/);
 });
-test('demo sessions never start or expire a staff shift',()=>{
- assert.match(main,/const shiftInactive=!parallelMode&&!demoMode&&isShiftWorker/);
- assert.match(main,/!parallelMode&&!demoMode&&isShiftWorker/);
+test('demo sessions retain an always-on backend shift while skipping automatic expiry',()=>{
+ assert.match(main,/const shiftInactive=!parallelMode&&isShiftWorker/);
+ assert.match(main,/!parallelMode&&isShiftWorker/);
  assert.match(main,/!hotel\|\|!shiftEnd\|\|parallelMode\|\|demoMode\)return/);
  assert.match(main,/demoMode\?\(lang==='en'\?'Demo workspace'/);
  assert.match(main,/DEMO · ALWAYS ON/);
