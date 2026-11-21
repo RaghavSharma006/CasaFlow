@@ -68,7 +68,7 @@ export async function queryData(
  // issuing the same lookup twice during sign-in. Chats are fetched on demand.
  const membershipRequest:Promise<any>=options.memberships
   ?Promise.resolve({data:options.memberships,error:null})
-  :db.from('memberships').select('hotel_id,user_id,display_name,role,active').eq('hotel_id',hotelId);
+  :(async()=>await db.from('memberships').select('hotel_id,user_id,display_name,role,active').eq('hotel_id',hotelId))();
  const chatsRequest:Promise<any>=options.includeChats===false
   ?Promise.resolve([{data:[],error:null},{data:[],error:null}])
   :Promise.all([
