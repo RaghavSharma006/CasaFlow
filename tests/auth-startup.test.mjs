@@ -19,3 +19,20 @@ test('first-time shift creation overlaps initial workspace data loading',()=>{
 test('successful signup sessions also immediately enter the authenticated app',()=>{
  assert.match(main,/if\(data\.session\)\{\s*onAuthenticated\(data\.session\)/);
 });
+
+test('setup is shown only after membership lookup confirms no active membership',()=>{
+ assert.match(main,/membershipState==='none'\)return <Onboard/);
+ assert.match(main,/setMembershipState\('ready'\);[\s\S]*?memberships:memberships as Member\[\]/);
+ assert.doesNotMatch(main,/if\(!hotel\|\|!myMember\)return <Onboard/);
+});
+test('workspace query errors cannot route an existing member into onboarding',()=>{
+ assert.match(main,/setMembershipState\(current=>current==='ready'\?'ready':'error'\)/);
+});
+test('initial auth event wins over a late getSession response',()=>{
+ assert.match(main,/let authEventSeen=false/);
+ assert.match(main,/if\(!authEventSeen\)setSession\(data.session\)/);
+});
+test('sign-in screen has no create-account toggle',()=>{
+ const auth=main.slice(main.indexOf('function Auth('),main.indexOf('const guestCategories'));
+ assert.doesNotMatch(auth,/className="authswitch"/);
+});
