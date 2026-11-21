@@ -3,11 +3,13 @@ import DemoLaunch from './DemoLaunch';
 import{createRoot}from'react-dom/client';
 import{Building2,LayoutDashboard,BedDouble,Brush,Wrench,HandPlatter,Users,MessageSquare,Activity,Settings,Plus,Search,Sun,Moon,Languages,ArrowRight,CheckCircle2,Clock,AlertTriangle,RefreshCw,LogOut,Menu,X,ChevronDown,KeyRound,Copy,ShieldCheck,Columns3,ClipboardCheck,DoorOpen,PackageMinus,ChartNoAxesColumnIncreasing,MapPin,Loader2,Lock,Mail,Send,Link,UserRound,Calendar,Info}from'lucide-react';
 import QRCode from 'qrcode';
-import DevSandbox from './demo';
-import CasaOverview from './CasaOverview';
-import CasaRoomBoard from './CasaRoomBoard';
-import{StaffWorkload,GuestIncidentDesk,SyncFeedback}from './WorkflowWidgets';
-import AtelierPreview from './AtelierPreview';
+const DevSandbox=React.lazy(()=>import('./demo'));
+const CasaOverview=React.lazy(()=>import('./CasaOverview'));
+const CasaRoomBoard=React.lazy(()=>import('./CasaRoomBoard'));
+const StaffWorkload=React.lazy(()=>import('./WorkflowWidgets').then(m=>({default:m.StaffWorkload})));
+const GuestIncidentDesk=React.lazy(()=>import('./WorkflowWidgets').then(m=>({default:m.GuestIncidentDesk})));
+const SyncFeedback=React.lazy(()=>import('./WorkflowWidgets').then(m=>({default:m.SyncFeedback})));
+const AtelierPreview=React.lazy(()=>import('./AtelierPreview'));
 import{db,configured,parallelMode,hotelStorage,queryData,rpc,isStale,roomLabel,roleLabel,type Role,type Room,type RoomStatus,type Task,type TaskKind,type Member,type Data}from'./db';
 import'./styles.css';
 import'./atelier.css';
@@ -408,4 +410,4 @@ function Guest({lang,setLang,theme,setTheme}:{lang:'en'|'es',setLang:(v:'en'|'es
   <p className="tiny">{en?'Requests are limited to prevent misuse. For medical emergencies, contact emergency services or the front desk directly.':'Las solicitudes tienen límites. En caso de emergencia médica contacte a emergencias o recepción.'}</p>
  </div></div>
 }
-createRoot(document.getElementById('root')!).render(location.pathname==='/demo-launch'?<DemoLaunch/>:<App/>);
+createRoot(document.getElementById('root')!).render(<React.Suspense fallback={<div className="authpage"><Loader2 className="spin" size={30}/><p>Loading CasaFlow…</p></div>}>{location.pathname==='/demo-launch'?<DemoLaunch/>:<App/>}</React.Suspense>);
