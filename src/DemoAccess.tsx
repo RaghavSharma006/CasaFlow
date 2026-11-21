@@ -80,9 +80,10 @@ export function DemoLauncher(){
    <p className="demo-access-eyebrow">TRY THE REAL PRODUCT</p>
    <h1>One hotel. Eight roles. Your own private workspace.</h1>
    <p>Explore the live CasaFlow application using a temporary hotel workspace created just for this browser. Every role has its own real account and permissions. Other visitors cannot see your demo data.</p>
-   {!active?{turnstileSiteKey&&<div className="demo-access-turnstile" ref={turnstileRef} aria-label="Complete the security check"/>}
-   <button className="demo-access-primary" disabled={busy||(!!turnstileSiteKey&&!turnstileToken)} onClick={()=>void startDemo()}>{busy?<RefreshCw className="demo-access-spin" size={17}/>:<Users size={17}/>} {busy?'Preparing your hotel…':'Start my interactive demo'}</button>
-   :<div className="demo-access-active"><CheckCircle2 size={18}/><div><b>Your demo hotel is ready</b><small>{expiresAt?'Automatically expires '+new Date(expiresAt).toLocaleTimeString():'Temporary session active'}</small></div></div>}
+   {!active?<>
+    {turnstileSiteKey&&<div className="demo-access-turnstile" ref={turnstileRef} aria-label="Complete the security check"/>}
+    <button className="demo-access-primary" disabled={busy||(!!turnstileSiteKey&&!turnstileToken)} onClick={()=>void startDemo()}>{busy?<RefreshCw className="demo-access-spin" size={17}/>:<Users size={17}/>} {busy?'Preparing your hotel…':'Start my interactive demo'}</button>
+   </>:<div className="demo-access-active"><CheckCircle2 size={18}/><div><b>Your demo hotel is ready</b><small>{expiresAt?'Automatically expires '+new Date(expiresAt).toLocaleTimeString():'Temporary session active'}</small></div></div>}
    {error&&<p className="demo-access-error" role="alert">{error}</p>}{notice&&<p className="demo-access-notice" role="status">{notice}</p>}
   </section>
   {active&&<>
