@@ -257,3 +257,110 @@ begin
  return h;
 end
 $$;
+
+
+-- Guard all remaining direct-auth mutation helpers as well. These functions
+-- historically checked only membership and did not call can_access/can_role.
+
+create or replace function public.begin_work_shift(p_hotel uuid)
+returns timestamptz language plpgsql security definer set search_path='' as $$
+declare v_end timestamptz;v_minutes integer;v_recent_auth bigint;v_role text;
+begin
+ if not app_private.demo_session_is_active() then
+  raise exception 'Demo session has expired' using errcode='42501';
+ end if;
+ select m.role into v_role from public.memberships m
+ where m.hotel_id=p_hotel and m.user_id=auth.uid() and m.active;
+ if not found then raise exception 'Active hotel membership required' using errcode='42501'; end if;
+ if v_role in ('owner','manager') then return null; end if;
+ select s.shift_ends_at,s.shift_duration_minutes into v_end,v_minutes
+ from public.staff_dispatch s where s.hotel_id=p_hotel and s.user_id=auth.uid() for update;
+ if found and v_end>now() and
+   (select on_shift from public.staff_dispatch where hotel_id=p_hotel and user_id=auth.uid())
+ then return v_end; end if;
+ if v_end is not null and auth.jwt() is not null then
+  v_recent_auth:=nullif(auth.jwt()#>>'{amr,0,timestamp}','')::bigint;
+  if v_recent_auth is null or to_timestamp(v_recent_auth)<v_end-interval '2 seconds' then
+   raise exception 'Shift has ended: sign in again to begin another shift' using errcode='42501';
+  end if;
+ end if;
+ insert into public.staff_dispatch(hotel_id,user_id,on_shift,shift_started_at,shift_ends_at)
+ values(p_hotel,auth.uid(),true,now(),now()+interval '8 hours')
+ on conflict(hotel_id,user_id) do update
+ set on_shift=true,shift_started_at=now(),
+     shift_ends_at=now()+(public.staff_dispatch.shift_duration_minutes * interval '1 minute'),updated_at=now()
+ returning shift_ends_at into v_end;
+ insert into public.activity(hotel_id,actor_id,message)
+ values(p_hotel,auth.uid(),'Employee signed in; shift started automatically');
+ perform app_private.rebalance_work(p_hotel);
+ return v_end;
+end
+$$;
+
+create or replace function public.end_work_shift(p_hotel uuid)
+returns void language plpgsql security definer set search_path='' as $$
+begin
+ if not app_private.demo_session_is_active() then
+  raise exception 'Demo session has expired' using errcode='42501';
+ end if;
+ if not exists(select 1 from public.memberships where hotel_id=p_hotel and user_id=auth.uid() and active)
+ then raise exception 'Forbidden' using errcode='42501'; end if;
+ update public.staff_dispatch
+ set on_shift=false,shift_ends_at=least(coalesce(shift_ends_at,now()),now()),updated_at=now()
+ where hotel_id=p_hotel and user_id=auth.uid() and on_shift;
+ perform app_private.rebalance_work(p_hotel);
+end
+$$;
+
+create or replace function public.ack_worker_notice(p_notice bigint)
+returns void language plpgsql security definer set search_path='' as $$
+begin
+ if auth.uid() is null or not app_private.demo_session_is_active() then
+  raise exception 'Sign in required or demo session expired' using errcode='42501';
+ end if;
+ update public.worker_notices wn set acknowledged_at=now()
+ where wn.id=p_notice and wn.recipient_id=auth.uid()
+ and exists(select 1 from public.memberships m where m.user_id=auth.uid() and m.hotel_id=wn.hotel_id and m.active)
+ and wn.acknowledged_at is null;
+ if not found and not exists(select 1 from public.worker_notices where id=p_notice and recipient_id=auth.uid() and acknowledged_at is not null)
+ then raise exception 'Notice not found' using errcode='42501'; end if;
+end
+$$;
+
+create or replace function public.accept_staff_invite(p_token text,p_display_name text)
+returns uuid language plpgsql security definer set search_path='' as $$
+declare inv public.staff_invites%rowtype;
+begin
+ if auth.uid() is null then raise exception 'Sign in first'; end if;
+ if coalesce(auth.jwt()->'app_metadata'->>'casaflow_demo','false')='true' then
+  raise exception 'Public demo accounts cannot join existing hotels' using errcode='42501';
+ end if;
+ if length(trim(coalesce(p_display_name,''))) not between 2 and 100 then raise exception 'Invalid name'; end if;
+ select * into inv from public.staff_invites
+ where token_hash=encode(extensions.digest(p_token,'sha256'),'hex') for update;
+ if not found or inv.used_at is not null or inv.expires_at<now() then raise exception 'Invalid or expired invitation'; end if;
+ insert into public.memberships(hotel_id,user_id,display_name,role)
+ values(inv.hotel_id,auth.uid(),trim(p_display_name),inv.role)
+ on conflict(hotel_id,user_id) do update set display_name=excluded.display_name,role=excluded.role,active=true;
+ update public.staff_invites set used_at=now() where id=inv.id;
+ insert into public.activity(hotel_id,actor_id,message) values(inv.hotel_id,auth.uid(),'Staff member joined');
+ return inv.hotel_id;
+end
+$$;
+
+create or replace function public.create_hotel(p_name text,p_city text default '')
+returns uuid language plpgsql security definer set search_path='' as $$
+declare h uuid;
+begin
+ if auth.uid() is null then raise exception 'Sign in first' using errcode='28000'; end if;
+ if coalesce(auth.jwt()->'app_metadata'->>'casaflow_demo','false')='true' then
+  raise exception 'Public demo accounts cannot create additional hotels' using errcode='42501';
+ end if;
+ if length(trim(p_name)) not between 2 and 120 then raise exception 'Invalid name'; end if;
+ insert into public.hotels(name,city) values(trim(p_name),left(trim(coalesce(p_city,'')),150)) returning id into h;
+ insert into public.memberships(hotel_id,user_id,display_name,role)
+ values(h,auth.uid(),coalesce(nullif(left(trim(auth.jwt()->>'email'),100),''),'Owner'),'owner');
+ insert into public.activity(hotel_id,actor_id,message) values(h,auth.uid(),'Hotel created');
+ return h;
+end
+$$;
