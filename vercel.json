@@ -8,6 +8,14 @@
   ],
   "rewrites": [
     {
+      "source": "/demo-role",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/demo-launch",
+      "destination": "/index.html"
+    },
+    {
       "source": "/dev",
       "destination": "/index.html"
     },
@@ -50,6 +58,12 @@
     {
       "source": "/parallel",
       "destination": "/parallel.html"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/demo/cleanup",
+      "schedule": "0 3 * * *"
     }
   ]
 }
