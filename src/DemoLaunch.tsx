@@ -46,4 +46,3 @@ export default function DemoLaunch(){
   </div>
  </section></main>
 }
-if(location.pathname==='/demo-launch')createRoot(document.getElementById('root')!).render(<DemoLaunch/>);
