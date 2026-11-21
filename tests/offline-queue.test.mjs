@@ -37,3 +37,21 @@ test('task and room reads still require active hotel membership',()=>{
  assert.match(migration,/app_private\.can_access\(hotel_id\)/);
  assert.match(migration,/app_private\.can_access\(hotel_id\)[\s\S]*?create policy rooms_read/);
 });
+
+test('workers can renew expired shifts without a forced sign-out',()=>{
+ assert.match(ui,/const shiftInactive=!parallelMode&&!demoMode&&isShiftWorker/);
+ assert.match(ui,/rpc\('begin_work_shift'/);
+ assert.doesNotMatch(ui,/await db\.auth\.signOut\(\);[\s\S]{0,180}Please sign in again to start your next shift/);
+ assert.match(ui,/startShift=async/);
+});
+test('workers can claim eligible open unassigned tasks through a protected RPC',()=>{
+ assert.match(ui,/const mayClaim=\(task:Task\)=>/);
+ assert.match(ui,/rpc\('claim_department_task'/);
+ assert.match(ui,/v_task\.assigned_to IS NOT NULL/);
+ assert.match(ui,/v_required_skill=ANY\(s\.verified_skills\)/);
+ assert.match(ui,/v_open_count>=v_capacity/);
+});
+test('completed work triggers automatic queue refill',()=>{
+ assert.match(migration,/CREATE TRIGGER casaflow_rebalance_released_work/);
+ assert.match(migration,/PERFORM app_private\.rebalance_work\(NEW\.hotel_id\)/);
+});
