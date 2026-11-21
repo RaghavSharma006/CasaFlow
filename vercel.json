@@ -8,6 +8,10 @@
   ],
   "rewrites": [
     {
+      "source": "/demo-launch",
+      "destination": "/index.html"
+    },
+    {
       "source": "/dev",
       "destination": "/index.html"
     },

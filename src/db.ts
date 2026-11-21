@@ -22,9 +22,11 @@ export const configured=Boolean(url&&key);
 // continue to use the default persistent Supabase storage unchanged.
 const PARALLEL_FLAG='casaflow-parallel-active';
 export const parallelMode=typeof window!=='undefined'&&(
- new URLSearchParams(window.location.search).get('parallel')==='1'||
+ (new URLSearchParams(window.location.search).get('parallel')==='1'||window.location.pathname==='/demo-launch')||
  window.sessionStorage.getItem(PARALLEL_FLAG)==='1'
 );
+// Only a ticket-validated CasaFlow demo launch sets this per-tab flag.
+export const demoMode=typeof window!=='undefined'&&window.sessionStorage.getItem('casaflow-demo-session')==='1';
 let parallelAuthKey: string | undefined;
 if(parallelMode){
  window.sessionStorage.setItem(PARALLEL_FLAG,'1');
@@ -59,20 +61,34 @@ export async function fetchHotelRooms(hotelId:string):Promise<Room[]>{
  }
  return result;
 }
-export async function queryData(hotelId:string):Promise<Data>{
+export async function queryData(
+ hotelId:string,
+ options:{memberships?:Member[],includeChats?:boolean}={}
+):Promise<Data>{
  if(!db)throw Error('Backend not configured');
- const [a,b,rooms,d,e,f,g,h,i,j]=await Promise.all([
- db.from('hotels').select('id,name,city,preferred_language').eq('id',hotelId),
- db.from('memberships').select('hotel_id,user_id,display_name,role,active').eq('hotel_id',hotelId),
- fetchHotelRooms(hotelId),
- db.from('tasks').select('id,hotel_id,room_id,kind,title,detail,priority,status,assigned_to,created_by,version,created_at,updated_at,completed_at').eq('hotel_id',hotelId).order('created_at',{ascending:false}).limit(300),
- db.from('activity').select('id,hotel_id,room_id,task_id,actor_id,message,at').eq('hotel_id',hotelId).order('at',{ascending:false}).limit(80),
- db.from('messages').select('id,hotel_id,room_id,sender_id,body,created_at').eq('hotel_id',hotelId).is('room_id',null).order('created_at',{ascending:false}).limit(100),
- db.from('private_messages').select('id,hotel_id,recipient_kind,thread_user_id,sender_id,body,created_at').eq('hotel_id',hotelId).order('created_at',{ascending:false}).limit(200),
- db.from('staff_dispatch').select('hotel_id,user_id,on_shift,max_open_tasks,verified_skills,shift_started_at,shift_ends_at,shift_duration_minutes,updated_at').eq('hotel_id',hotelId),
- db.from('guest_request_meta').select('task_id,hotel_id,category,department,urgent,accepted_at,escalated_at,ack_deadline,assigned_at').eq('hotel_id',hotelId).order('created_at',{ascending:false}).limit(300),
- db.from('ops_alerts').select('id,hotel_id,task_id,reason,target,body,created_at,acknowledged_at').eq('hotel_id',hotelId).is('acknowledged_at',null).order('created_at',{ascending:false}).limit(100)
+ // Memberships are already verified by the auth gate. Reuse them rather than
+ // issuing the same lookup twice during sign-in. Chats are fetched on demand.
+ const membershipRequest:Promise<any>=options.memberships
+  ?Promise.resolve({data:options.memberships,error:null})
+  :(async()=>await db.from('memberships').select('hotel_id,user_id,display_name,role,active').eq('hotel_id',hotelId))();
+ const chatsRequest:Promise<any>=options.includeChats===false
+  ?Promise.resolve([{data:[],error:null},{data:[],error:null}])
+  :Promise.all([
+    db.from('messages').select('id,hotel_id,room_id,sender_id,body,created_at').eq('hotel_id',hotelId).is('room_id',null).order('created_at',{ascending:false}).limit(100),
+    db.from('private_messages').select('id,hotel_id,recipient_kind,thread_user_id,sender_id,body,created_at').eq('hotel_id',hotelId).order('created_at',{ascending:false}).limit(200)
+   ]);
+ const [a,b,rooms,d,e,chat,h,i,j]=await Promise.all([
+  db.from('hotels').select('id,name,city,preferred_language').eq('id',hotelId),
+  membershipRequest,
+  fetchHotelRooms(hotelId),
+  db.from('tasks').select('id,hotel_id,room_id,kind,title,detail,priority,status,assigned_to,created_by,version,created_at,updated_at,completed_at').eq('hotel_id',hotelId).order('created_at',{ascending:false}).limit(300),
+  db.from('activity').select('id,hotel_id,room_id,task_id,actor_id,message,at').eq('hotel_id',hotelId).order('at',{ascending:false}).limit(80),
+  chatsRequest,
+  db.from('staff_dispatch').select('hotel_id,user_id,on_shift,max_open_tasks,verified_skills,shift_started_at,shift_ends_at,shift_duration_minutes,updated_at').eq('hotel_id',hotelId),
+  db.from('guest_request_meta').select('task_id,hotel_id,category,department,urgent,accepted_at,escalated_at,ack_deadline,assigned_at').eq('hotel_id',hotelId).order('created_at',{ascending:false}).limit(300),
+  db.from('ops_alerts').select('id,hotel_id,task_id,reason,target,body,created_at,acknowledged_at').eq('hotel_id',hotelId).is('acknowledged_at',null).order('created_at',{ascending:false}).limit(100)
  ]);
+ const [f,g]=chat;
  for(const result of [a,b,d,e,f,g,h,i,j])if(result.error)throw result.error;
  return {hotels:a.data as Hotel[],memberships:b.data as Member[],rooms,tasks:d.data as Task[],activity:e.data as Event[],messages:f.data as Message[],privateMessages:g.data as PrivateMessage[],staffDispatch:h.data as Dispatch[],guestMeta:i.data as GuestMeta[],alerts:j.data as OpsAlert[]};
 }

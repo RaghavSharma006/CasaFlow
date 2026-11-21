@@ -1,13 +1,16 @@
 import React,{useState,useEffect,useCallback,useRef,useMemo} from 'react';
+import DemoLaunch from './DemoLaunch';
 import{createRoot}from'react-dom/client';
 import{Building2,LayoutDashboard,BedDouble,Brush,Wrench,HandPlatter,Users,MessageSquare,Activity,Settings,Plus,Search,Sun,Moon,Languages,ArrowRight,CheckCircle2,Clock,AlertTriangle,RefreshCw,LogOut,Menu,X,ChevronDown,KeyRound,Copy,ShieldCheck,Columns3,ClipboardCheck,DoorOpen,PackageMinus,ChartNoAxesColumnIncreasing,MapPin,Loader2,Lock,Mail,Send,Link,UserRound,Calendar,Info}from'lucide-react';
 import QRCode from 'qrcode';
-import DevSandbox from './demo';
-import CasaOverview from './CasaOverview';
-import CasaRoomBoard from './CasaRoomBoard';
-import{StaffWorkload,GuestIncidentDesk,SyncFeedback}from './WorkflowWidgets';
-import AtelierPreview from './AtelierPreview';
-import{db,configured,parallelMode,hotelStorage,queryData,rpc,isStale,roomLabel,roleLabel,type Role,type Room,type RoomStatus,type Task,type TaskKind,type Member,type Data}from'./db';
+const DevSandbox=React.lazy(()=>import('./demo'));
+const CasaOverview=React.lazy(()=>import('./CasaOverview'));
+const CasaRoomBoard=React.lazy(()=>import('./CasaRoomBoard'));
+const StaffWorkload=React.lazy(()=>import('./WorkflowWidgets').then(m=>({default:m.StaffWorkload})));
+const GuestIncidentDesk=React.lazy(()=>import('./WorkflowWidgets').then(m=>({default:m.GuestIncidentDesk})));
+const SyncFeedback=React.lazy(()=>import('./WorkflowWidgets').then(m=>({default:m.SyncFeedback})));
+const AtelierPreview=React.lazy(()=>import('./AtelierPreview'));
+import{db,configured,parallelMode,demoMode,hotelStorage,queryData,rpc,isStale,roomLabel,roleLabel,type Role,type Room,type RoomStatus,type Task,type TaskKind,type Member,type Data}from'./db';
 import'./styles.css';
 import'./atelier.css';
 import'./atelier_exact.css';
@@ -31,7 +34,9 @@ function Toast({value}:{value:string}){return value?<div className="toast"><Info
 function App(){
  const[lang,setLang]=useLang(),[theme,setTheme]=useTheme();const t=labels[lang];
  const [session,setSession]=useState<any>(null),[checking,setChecking]=useState(true);
+ const [membershipState,setMembershipState]=useState<'checking'|'ready'|'none'|'error'>('checking');
  const[hotel,setHotel]=useState<string|null>(hotelStorage.getItem('casaflow-hotel'));
+ const hotelRef=useRef<string|null>(hotel);hotelRef.current=hotel;
  const[data,setData]=useState<Data>({hotels:[],memberships:[],rooms:[],tasks:[],activity:[],messages:[],privateMessages:[],staffDispatch:[],guestMeta:[],alerts:[]});
  const[view,setView]=useState<View>('overview'),[roomId,setRoomId]=useState<string|null>(null);
  const[search,setSearch]=useState(''),[statusFilter,setStatusFilter]=useState('all'),[modal,setModal]=useState<'task'|'room'|'invite'|'qr'|'dispatch'|null>(null);
@@ -48,42 +53,89 @@ function App(){
   if(!db||signingOut)return;
   setSigningOut(true);
   try{
-   if(hotel){try{await rpc('end_work_shift',{p_hotel:hotel})}catch{/* The scheduled expiry worker will finalize an offline sign-out. */}}
-   const {error}=await db.auth.signOut();
+   if(hotel&&!parallelMode&&!demoMode){try{await rpc('end_work_shift',{p_hotel:hotel})}catch{/* The scheduled expiry worker will finalize an offline sign-out. */}}
+   const {error}=await db.auth.signOut(parallelMode||demoMode?{scope:'local'}:undefined);
    if(error)throw error;
-   setSession(null);setHotel(null);setMenu(false);setMoreOpen(false);
+   setSession(null);setHotel(null);hotelRef.current=null;setMenu(false);setMoreOpen(false);
    hotelStorage.removeItem('casaflow-hotel');
-   window.history.replaceState(null,'','/');
+   if(parallelMode||demoMode){window.sessionStorage.removeItem('casaflow-parallel-active');window.sessionStorage.removeItem('casaflow-parallel-tab-id');window.sessionStorage.removeItem('casaflow-demo-session');}
+   window.location.replace('/');
   }catch(err:any){notify(err?.message||'Unable to sign out. Try again.')}
   finally{setSigningOut(false)}
  };
- useEffect(()=>{if(!db){setChecking(false);return}db.auth.getSession().then(({data,error})=>{if(error)notify(error.message);setSession(data.session);}).catch(()=>notify('Unable to restore login. Check your connection and refresh.')).finally(()=>setChecking(false));const{subscription}=db.auth.onAuthStateChange((_evt,s)=>{setSession(s);if(!s){setHotel(null);hotelStorage.removeItem('casaflow-hotel')}}).data;return()=>subscription.unsubscribe()},[]);
+ useEffect(()=>{
+  if(!db){setChecking(false);setMembershipState('error');return}
+  let authEventSeen=false;
+  const {data:{subscription}}=db.auth.onAuthStateChange((event,s)=>{
+   authEventSeen=true;
+   setSession(s);
+   if(event==='INITIAL_SESSION'||event==='SIGNED_IN'||event==='SIGNED_OUT'){
+    setChecking(false);
+    setMembershipState('checking');
+   }
+   if(!s){
+    hotelRef.current=null;
+    setHotel(null);
+    hotelStorage.removeItem('casaflow-hotel');
+    setData(d=>({...d,memberships:[]}));
+    setSync('connecting');
+   }
+  });
+  db.auth.getSession().then(({data,error})=>{
+   if(error)notify(error.message);
+   if(!authEventSeen)setSession(data.session);
+  }).catch(()=>notify('Unable to restore login. Check your connection and refresh.')).finally(()=>setChecking(false));
+  return()=>subscription.unsubscribe();
+ },[]);
  const load=useCallback(async()=>{
   if(!db||!session?.user)return;
   if(inFlight.current){queued.current=true;await inFlight.current;return;}
   const request=(async()=>{try{
     const{data:memberRows,error}=await db.from('memberships').select('hotel_id,user_id,display_name,role,active').eq('user_id',session.user.id).eq('active',true);
     if(error)throw error;
-    const memberships=memberRows||[];
-    if(!memberships.length){setHotel(null);setData(d=>({...d,memberships:[]}));setSync('live');return}
-    const valid=memberships.some(m=>m.hotel_id===hotel)?hotel:memberships[0].hotel_id;
-    if(valid!==hotel){setHotel(valid);hotelStorage.setItem('casaflow-hotel',valid!);return}
-    if(!window.sessionStorage.getItem('casaflow-signin-pending')){
-     const shift=await db.from('staff_dispatch').select('shift_started_at,shift_ends_at,on_shift').eq('hotel_id',valid!).eq('user_id',session.user.id).maybeSingle();
-     if(shift.error)throw shift.error;
-     if(!shift.data?.shift_started_at){await rpc('begin_work_shift',{p_hotel:valid!})}
-     else if(!shift.data.on_shift||!shift.data.shift_ends_at||Date.parse(shift.data.shift_ends_at)<=Date.now()){
-       await db.auth.signOut();setSession(null);setHotel(null);hotelStorage.removeItem('casaflow-hotel');notify('Your shift has ended. Sign in to begin your next shift.');return;
+    const memberships=(memberRows||[]) as Member[];
+    if(!memberships.length){
+     setMembershipState('none');
+     setHotel(null);
+     hotelRef.current=null;
+     hotelStorage.removeItem('casaflow-hotel');
+     setData({hotels:[],memberships:[],rooms:[],tasks:[],activity:[],messages:[],privateMessages:[],staffDispatch:[],guestMeta:[],alerts:[]});
+     setSync('live');
+     return;
+    }
+    // Resolve identity first so dashboard navigation does not wait for every
+    // table. Reuse this verified membership result in the workspace query.
+    setMembershipState('ready');
+    setData(d=>({...d,memberships}));
+    const selectedHotel=hotelRef.current;
+    const valid=memberships.some(m=>m.hotel_id===selectedHotel)?selectedHotel:memberships[0].hotel_id;
+    if(valid!==selectedHotel){hotelRef.current=valid;setHotel(valid);hotelStorage.setItem('casaflow-hotel',valid!)}
+    let next=await queryData(valid!,{memberships,includeChats:false});
+    let shift=next.staffDispatch.find(d=>d.user_id===session.user.id&&d.hotel_id===valid);
+    const workerRole=memberships.find(m=>m.user_id===session.user.id)?.role;
+    const isShiftWorker=workerRole==='housekeeping'||workerRole==='maintenance'||workerRole==='frontdesk'||workerRole==='supervisor';
+    const shiftInactive=!parallelMode&&isShiftWorker&&(!shift?.on_shift||!shift.shift_ends_at||(!demoMode&&Date.parse(shift.shift_ends_at)<=Date.now()));
+    // Start or renew the worker shift before showing the queue. The database
+    // performs dispatch in the same transaction; reload so the UI sees owners.
+    if(shiftInactive){
+     try{
+      await rpc('begin_work_shift',{p_hotel:valid!});
+      next=await queryData(valid!,{memberships,includeChats:false});
+      shift=next.staffDispatch.find(d=>d.user_id===session.user.id&&d.hotel_id===valid);
+     }catch(err:any){
+      const message=err?.message||'Could not start your work shift. Use Start shift to retry.';
+      setLastError(message);notify(message);
      }
     }
-    const next=await queryData(valid!);setData(next);setLastSync(Date.now());setLastError('');setSync('live');
-  }catch(err:any){setSync('offline');setLastError(err.message||String(err));notify(err.message||String(err))}})();
+    setData(next);setLastSync(Date.now());setSync('live');
+    setLastError(shiftInactive&&!shift?.on_shift?'Your shift is not active. Start your shift to receive and claim jobs.':'');
+  }catch(err:any){setMembershipState(current=>current==='ready'?'ready':'error');setSync('offline');setLastError(err.message||String(err));notify(err.message||String(err))}})();
   inFlight.current=request;
   try{await request;}finally{
     inFlight.current=null;
     if(queued.current){queued.current=false;setTimeout(()=>refreshRef.current(),350)}
   }
- },[session?.user?.id,hotel]);
+ },[session?.user?.id]);
  useEffect(()=>{refreshRef.current=()=>{void load()}},[load]);useEffect(()=>{void load()},[load]);
  useEffect(()=>{const onShift=()=>void load();window.addEventListener('casaflow-shift-started',onShift);return()=>window.removeEventListener('casaflow-shift-started',onShift)},[load]);
  const refreshChats=useCallback(async()=>{
@@ -107,25 +159,26 @@ function App(){
   .on('postgres_changes',{event:'*',schema:'public',table:'ops_alerts',filter:'hotel_id=eq.'+hotel},()=>schedule())
   .on('postgres_changes',{event:'*',schema:'public',table:'staff_dispatch',filter:'hotel_id=eq.'+hotel},()=>schedule())
   .on('postgres_changes',{event:'*',schema:'public',table:'memberships',filter:'hotel_id=eq.'+hotel},()=>schedule())
-  .subscribe(s=>{if(s==='SUBSCRIBED'){setSync('live');refreshRef.current()}if(s==='CHANNEL_ERROR'||s==='TIMED_OUT')setSync('offline')});
+  .subscribe(s=>{if(s==='SUBSCRIBED'){setSync('live')}if(s==='CHANNEL_ERROR'||s==='TIMED_OUT')setSync('offline')});
   function schedule(){if(timer.current)clearTimeout(timer.current);timer.current=setTimeout(()=>refreshRef.current(),450)}
   function scheduleChat(){if(chatTimer.current)clearTimeout(chatTimer.current);chatTimer.current=setTimeout(()=>refreshChatRef.current(),180)}
   const onFocus=()=>refreshRef.current();const onOnline=()=>refreshRef.current();window.addEventListener('focus',onFocus);window.addEventListener('online',onOnline);
   const poll=setInterval(()=>{if(document.visibilityState==='visible')refreshRef.current()},15000);
   return()=>{if(timer.current)clearTimeout(timer.current);if(chatTimer.current)clearTimeout(chatTimer.current);clearInterval(poll);window.removeEventListener('focus',onFocus);window.removeEventListener('online',onOnline);void db?.removeChannel(channel)};
  },[hotel,session?.user?.id]);
+ useEffect(()=>{if(view==='messages')void refreshChats()},[view,refreshChats,lastSync]);
  const action=async(fn:()=>Promise<unknown>)=>{if(busy)return;setBusy(true);try{const result=await fn();await load();setLastError('');if(result&&typeof result==='object'&&'added' in result){const r=result as {added:number,skipped:number};notify(lang==='en'?`Created ${r.added} rooms (${r.skipped} already existed).`:`Se crearon ${r.added} habitaciones (${r.skipped} ya existían).`)}else notify(lang==='en'?'Saved and synchronized':'Guardado y sincronizado')}catch(e:any){setLastError(e.message||t.error);notify(isStale(e.message)?(lang==='en'?'Another user changed this first. Refresh and retry.':'Otro usuario cambió esto. Actualiza.'):(e.message||t.error));await load()}finally{setBusy(false)}};
  const currentShift=data.staffDispatch.find(d=>d.user_id===session?.user?.id&&d.hotel_id===hotel);
  const shiftEnd=currentShift?.shift_ends_at||null;
  useEffect(()=>{
-  if(!db||!session?.user||!hotel||!shiftEnd)return;
+  if(!db||!session?.user||!hotel||!shiftEnd||parallelMode||demoMode)return;
   let expired=false;
   const check=async()=>{
    if(expired||window.sessionStorage.getItem('casaflow-signin-pending')||Date.parse(shiftEnd)>Date.now())return;
    expired=true;
    try{await rpc('end_work_shift',{p_hotel:hotel})}catch{/* cron will handle reallocation if offline */}
-   await db?.auth.signOut().catch(()=>null);
-   setSession(null);setHotel(null);hotelStorage.removeItem('casaflow-hotel');notify('Shift finished. You have been signed out automatically.');
+   await db?.auth.signOut(parallelMode||demoMode?{scope:'local'}:undefined).catch(()=>null);
+   setSession(null);setHotel(null);hotelRef.current=null;hotelStorage.removeItem('casaflow-hotel');notify('Shift finished. You have been signed out automatically.');
   };
   const id=window.setInterval(()=>void check(),1000);
   window.addEventListener('focus',check);document.addEventListener('visibilitychange',check);
@@ -146,6 +199,15 @@ function App(){
  },[myMember?.role]);
  useEffect(()=>{if(!permitted.includes(view))setView(permitted[0])},[role,view]);
  const occupied=data.rooms.filter(r=>r.status==='occupied').length,ready=data.rooms.filter(r=>r.status==='ready').length,pending=data.tasks.filter(k=>!['done','cancelled'].includes(k.status)),high=pending.filter(k=>k.priority!=='normal').length;
+ // Workers' jobs can be unassigned while they are offline. Keep the active
+ // department queue visible after sign-in instead of counting assigned_to only.
+ const workerQueue=pending.filter(k=>{
+  if(k.assigned_to===session?.user?.id||k.created_by===session?.user?.id)return true;
+  if(k.assigned_to!==null)return false;
+  if(role==='maintenance')return ['maintenance','damage'].includes(k.kind)||(k.kind==='guest'&&data.guestMeta.some(g=>g.task_id===k.id&&g.department==='maintenance'));
+  if(role==='housekeeping')return ['cleaning','supply','damage'].includes(k.kind)||(k.kind==='guest'&&data.guestMeta.some(g=>g.task_id===k.id&&g.department==='housekeeping'));
+  return false;
+ });
  const visibleTasks=useMemo(()=>{let all=data.tasks.filter(k=>view==='cleaning'?(['cleaning','supply'].includes(k.kind)||(k.kind==='guest'&&data.guestMeta.some(g=>g.task_id===k.id&&g.department==='housekeeping'))):view==='maintenance'?(['maintenance','damage'].includes(k.kind)||(k.kind==='guest'&&data.guestMeta.some(g=>g.task_id===k.id&&g.department==='maintenance'))):view==='requests'?k.kind==='guest':true);if(role==='housekeeping')all=all.filter(k=>['cleaning','supply','damage','guest'].includes(k.kind));if(role==='maintenance')all=all.filter(k=>['maintenance','damage','guest'].includes(k.kind));return all.filter(k=>(statusFilter==='all'||k.status===statusFilter)&&(k.title+' '+k.detail+' '+(data.rooms.find(r=>r.id===k.room_id)?.number||'')).toLowerCase().includes(search.toLowerCase()))},[data.tasks,data.rooms,data.guestMeta,view,role,statusFilter,search]);
  const room=data.rooms.find(r=>r.id===roomId);
  const isInboxAgent=(chatMode==='owner'&&role==='owner')||(chatMode==='frontdesk'&&role==='frontdesk');
@@ -164,8 +226,22 @@ function App(){
  };
  const mutate=(name:string,params:Record<string,unknown>)=>action(()=>rpc(name,params));
  const manualRefresh=async()=>{if(refreshing)return;setRefreshing(true);setSync('connecting');setLastError('');try{await load()}finally{setRefreshing(false)}};
+ const shiftActive=demoMode||Boolean(currentShift?.on_shift&&currentShift.shift_ends_at&&Date.parse(currentShift.shift_ends_at)>Date.now());
+ const startShift=async()=>{if(busy||!hotel)return;setBusy(true);setLastError('');try{await rpc('begin_work_shift',{p_hotel:hotel});await load();notify(lang==='en'?'Your shift is active. Jobs are being assigned.':'Turno activo. Asignando tareas.')}catch(e:any){setLastError(e.message||'Could not start your shift');notify(e.message||'Could not start your shift')}finally{setBusy(false)}};
+ const claimTask=async(task:Task)=>{setWorkingId(task.id);try{await rpc('claim_department_task',{p_hotel:hotel,p_task:task.id,p_expected_version:task.version});await load();notify(lang==='en'?'Task added to your work queue':'Tarea añadida a tu cola')}catch(e:any){notify(e.message||t.error);await load()}finally{setWorkingId(null)}};
  const advance=async(task:Task)=>{setWorkingId(task.id);try{await mutate(task.kind==='guest'?(task.status==='open'?'accept_guest_request':'complete_guest_request'):'advance_task',{p_hotel:hotel,p_task:task.id,p_expected_version:task.version,...(task.kind==='guest'?{}:{p_assignee:null})})}finally{setWorkingId(null)}};
  const taskButton=(task:Task)=>task.kind==='guest'?(task.status==='open'?(lang==='en'?'Accept request':'Aceptar solicitud'):(lang==='en'?'Complete request':'Completar solicitud')):task.kind==='cleaning'?(task.status==='open'?t.start:task.status==='doing'?t.inspect:t.approve):(task.status==='open'?t.start:t.complete);
+ const mayClaim=(task:Task)=>{
+  if(!shiftActive||task.status!=='open'||task.assigned_to!==null)return false;
+  const guest=data.guestMeta.find(g=>g.task_id===task.id);
+  if(task.kind==='guest'){
+   if(!guest||guest.department!==role)return false;
+   if(role==='maintenance'&&guest.category==='broken_ac'&&!currentShift?.verified_skills.includes('ac'))return false;
+   if(role==='maintenance'&&guest.category==='plumbing'&&!currentShift?.verified_skills.includes('plumbing'))return false;
+   return role==='maintenance'||role==='housekeeping'||role==='frontdesk';
+  }
+  return role==='housekeeping'?['cleaning','supply','damage'].includes(task.kind):role==='maintenance'?['maintenance','damage'].includes(task.kind):false;
+ };
  const mayAdvance=(task:Task)=>{
   if(task.status==='done'||task.status==='cancelled')return false;
   if(task.kind==='guest')return task.status==='doing'?task.assigned_to===session?.user?.id||['owner','manager'].includes(role):task.assigned_to===session?.user?.id;
@@ -175,15 +251,17 @@ function App(){
   if(role==='housekeeping')return ['cleaning','supply','damage'].includes(task.kind)&&task.status!=='inspection';
   return ['maintenance','damage'].includes(task.kind);
  };
- const taskCards=(tasks:Task[])=>tasks.length?<div className="tasklist">{tasks.map(k=>{const rm=data.rooms.find(r=>r.id===k.room_id);const assignee=data.memberships.find(m=>m.user_id===k.assigned_to);const disabled=k.status==='done'||k.status==='cancelled';const guest=data.guestMeta.find(g=>g.task_id===k.id);const blockedStart=k.kind==='cleaning'&&k.status==='open'&&rm?.status==='blocked';return <div className="taskrow" key={k.id}><div className={'kindicon kind-'+k.kind}>{k.kind==='cleaning'?<Brush/>:k.kind==='guest'?<HandPlatter/>:k.kind==='supply'?<PackageMinus/>:<Wrench/>}</div><div className="taskbody"><div className="tasktitle">{k.title} <Pill tone={'priority-'+k.priority}>{k.priority}</Pill>{guest?.escalated_at&&k.status==='open'&&<Pill tone="priority-high">{lang==='en'?'Needs management':'Necesita gerencia'}</Pill>}</div><div className="taskmeta">{t.room} {rm?.number||'—'} <span>·</span> {kindTitle(k.kind,t)} <span>·</span> {assignee?.display_name||t.unassigned}</div>{k.detail&&<div className="taskdetail">{k.detail}</div>}</div><div className="taskright"><Pill tone={statusTone(k.status)}>{t[k.status]}</Pill>{!disabled&&mayAdvance(k)&&<><button className="smallbtn" disabled={busy||blockedStart} title={blockedStart?'Management must release this blocked room before cleaning can start':undefined} onClick={()=>void advance(k)}>{workingId===k.id?<RefreshCw size={14} className="wf-spin"/>:null}{taskButton(k)} <ArrowRight size={14}/></button>{blockedStart&&<small className="wf-blocked-reason">Room blocked. Ask management to release it for cleaning.</small>}</>}</div></div>})}</div>:<div className="empty"><CheckCircle2 size={24}/><p>{t.noTasks}</p></div>;
+ const taskCards=(tasks:Task[])=>tasks.length?<div className="tasklist">{tasks.map(k=>{const rm=data.rooms.find(r=>r.id===k.room_id);const assignee=data.memberships.find(m=>m.user_id===k.assigned_to);const disabled=k.status==='done'||k.status==='cancelled';const guest=data.guestMeta.find(g=>g.task_id===k.id);const blockedStart=k.kind==='cleaning'&&k.status==='open'&&rm?.status==='blocked';return <div className="taskrow" key={k.id}><div className={'kindicon kind-'+k.kind}>{k.kind==='cleaning'?<Brush/>:k.kind==='guest'?<HandPlatter/>:k.kind==='supply'?<PackageMinus/>:<Wrench/>}</div><div className="taskbody"><div className="tasktitle">{k.title} <Pill tone={'priority-'+k.priority}>{k.priority}</Pill>{guest?.escalated_at&&k.status==='open'&&<Pill tone="priority-high">{lang==='en'?'Needs management':'Necesita gerencia'}</Pill>}</div><div className="taskmeta">{t.room} {rm?.number||'—'} <span>·</span> {kindTitle(k.kind,t)} <span>·</span> {assignee?.display_name||t.unassigned}</div>{k.detail&&<div className="taskdetail">{k.detail}</div>}</div><div className="taskright"><Pill tone={statusTone(k.status)}>{t[k.status]}</Pill>{!disabled&&mayAdvance(k)&&<><button className="smallbtn" disabled={busy||workingId===k.id||blockedStart} title={blockedStart?'Management must release this blocked room before cleaning can start':undefined} onClick={()=>void advance(k)}>{workingId===k.id?<RefreshCw size={14} className="wf-spin"/>:null}{taskButton(k)} <ArrowRight size={14}/></button>{blockedStart&&<small className="wf-blocked-reason">Room blocked. Ask management to release it for cleaning.</small>}</>}{!disabled&&mayClaim(k)&&<button className="smallbtn" disabled={busy||workingId===k.id} onClick={()=>void claimTask(k)}>{workingId===k.id?<RefreshCw size={14} className="wf-spin"/>:null}{lang==='en'?'Take task':'Tomar tarea'} <ArrowRight size={14}/></button>}</div></div>})}</div>:<div className="empty"><CheckCircle2 size={24}/><p>{t.noTasks}</p></div>;
  const navItems:{id:View,icon:React.ElementType}[]=[{id:'overview',icon:LayoutDashboard},{id:'rooms',icon:Columns3},{id:'cleaning',icon:Brush},{id:'maintenance',icon:Wrench},{id:'requests',icon:HandPlatter},{id:'team',icon:Users},{id:'messages',icon:MessageSquare},{id:'activity',icon:Activity},{id:'settings',icon:Settings}];
  if(location.pathname==='/design')return <AtelierPreview lang={lang} setLang={setLang} theme={theme} setTheme={setTheme}/>;
  if(location.pathname==='/dev')return <DevSandbox lang={lang} theme={theme} setLang={setLang} setTheme={setTheme}/>;
  if(location.pathname==='/guest')return <Guest lang={lang} setLang={setLang} theme={theme} setTheme={setTheme}/>;
  if(!configured)return <div className="authpage"><div className="authcard"><div className="logo large"><Building2/></div><h1>CasaFlow</h1><p>{t.demoDisabled}</p><div className="notice">{t.demoExplain}</div><p className="tiny">See README.md for the isolated Supabase project setup. Existing live demo remains unchanged.</p></div></div>;
- if(checking)return <div className="authpage"><Loader2 className="spin" size={30}/></div>;
- if(!session)return <Auth lang={lang} setLang={setLang} theme={theme} setTheme={setTheme} notify={notify}/>;
- if(!hotel||!myMember)return <Onboard t={t} lang={lang} theme={theme} setTheme={setTheme} setLang={setLang} onJoined={(id)=>{hotelStorage.setItem('casaflow-hotel',id);setHotel(id)}} notify={notify}/>;
+ if(checking)return <div className="authpage"><Loader2 className="spin" size={30}/><p>Restoring your session…</p></div>;
+ if(!session)return <Auth lang={lang} setLang={setLang} theme={theme} setTheme={setTheme} notify={notify} onAuthenticated={setSession}/>;
+ if(membershipState==='checking'||membershipState==='error')return <div className="authpage"><Loader2 className="spin" size={30}/><p>{membershipState==='error'?'Unable to verify your hotel access.':'Opening your workspace…'}</p>{membershipState==='error'&&<button className="button outline" type="button" onClick={()=>{setMembershipState('checking');void load()}}>Retry</button>}</div>;
+ if(membershipState==='none')return <Onboard t={t} lang={lang} theme={theme} setTheme={setTheme} setLang={setLang} onJoined={(id)=>{hotelRef.current=id;hotelStorage.setItem('casaflow-hotel',id);setHotel(id);setMembershipState('checking');void load()}} notify={notify}/>;
+ if(!hotel||!myMember)return <div className="authpage"><Loader2 className="spin" size={30}/><p>Opening your workspace…</p></div>;
  return <div className="app atelier-app a7 cf8" data-theme={theme==='dark'?'night':'light'}><aside className={'sidebar '+(menu?'open':'')}><div className="brand"><span className="atelier-brand-glyph" aria-hidden="true">C</span><div><strong>CasaFlow</strong><span>HOTEL OPERATIONS</span></div><IconButton onClick={()=>setMenu(false)}><X size={18}/></IconButton></div><div className="hotelcard"><div className="hotelavatar">{display.slice(0,2).toUpperCase()}</div><div><b>{display}</b><span>{roleLabel[role]} Workspace</span></div><ChevronDown size={16}/></div><p className="navlabel">{t.workspace} / 01</p><nav aria-label="Hotel workspaces">{navItems.filter(n=>permitted.includes(n.id)).map(({id,icon:Icon},i)=><button key={id} title={t[id]} className={'cf8-nav-item '+(view===id?'active':'')} aria-current={view===id?'page':undefined} onClick={()=>{setView(id);setMenu(false);setMoreOpen(false);setSearch('');setStatusFilter('all')}}><span className="nav-index">{String(i+1).padStart(2,'0')}</span><Icon size={18}/><span>{t[id]}</span>{id==='requests'&&pending.filter(k=>k.kind==='guest').length>0&&<i>{pending.filter(k=>k.kind==='guest').length}</i>}</button>)}{permitted.length>4&&<button type="button" className="cf8-mobile-more-button" aria-label="More workspaces" aria-expanded={moreOpen} onClick={()=>setMoreOpen(v=>!v)}><Menu size={20}/><span>More</span></button>}</nav><div className="sidebarbottom"><a className="demo-foot" href="/dev">{t.devMode}</a><div className="livehint"><span className={'syncdot '+sync}/><div><b>{t.allDepartments}</b><small>{t[sync==='live'?'online':sync==='connecting'?'syncing':'offline']}</small></div></div><div className="profile"><div className="roundavatar">{myMember.display_name.slice(0,2).toUpperCase()}</div><div><b>{myMember.display_name}</b><small>{roleLabel[role]}</small></div><button type="button" className="cf8-signout-side" onClick={()=>void signOut()} disabled={signingOut} aria-label={t.logout} title={t.logout}><LogOut size={17}/><span>{t.logout}</span></button></div></div></aside>
  {moreOpen&&<div className="cf8-more-overlay" role="presentation" onClick={()=>setMoreOpen(false)}><div className="cf8-more-sheet" role="menu" aria-label="Hotel workspaces" onClick={e=>e.stopPropagation()}><div className="cf8-more-head"><strong>{lang==='en'?'All workspaces':'Todos los espacios'}</strong><button type="button" aria-label="Close menu" onClick={()=>setMoreOpen(false)}><X size={20}/></button></div>{navItems.filter(n=>permitted.includes(n.id)).map(({id,icon:Icon})=><button type="button" role="menuitem" key={id} className={id===view?'active':''} onClick={()=>{setView(id);setMoreOpen(false);setSearch('');setStatusFilter('all')}}><Icon size={18}/>{t[id]}</button>)}</div></div>}
  <div className="main"><header className="topbar"><div className="crumb"><IconButton onClick={()=>setMenu(true)}><Menu size={20}/></IconButton><span>{roleLabel[role].toUpperCase()} WORKSPACE</span><span className="slash">/</span><b>{display}</b></div><div className="topactions"><button className="headerbtn" disabled={refreshing} onClick={()=>void manualRefresh()} title="Refresh account data" aria-label="Refresh account data"><RefreshCw size={16} className={refreshing?'wf-spin':undefined}/></button>{canDesk&&view==='overview'&&<button type="button" className="button atelier-new-task" onClick={()=>setModal('task')}><Plus size={16}/>{t.newTask}</button>}<span className={'connect '+sync}><span className={'syncdot '+sync}/>{t[sync==='live'?'online':sync==='connecting'?'syncing':'offline']}</span><button className="headerbtn" onClick={()=>setLang(lang==='en'?'es':'en')}><Languages size={16}/>{lang==='en'?'ES':'EN'}</button><button className="headerbtn" onClick={()=>setTheme(theme==='light'?'dark':'light')}>{theme==='light'?<Moon size={18}/>:<Sun size={18}/>}</button><button type="button" className="cf8-signout-header" onClick={()=>void signOut()} disabled={signingOut} aria-label={t.logout} title={t.logout}><LogOut size={16}/><span>{t.logout}</span></button><div className="roundavatar mini">{myMember.display_name.slice(0,2).toUpperCase()}</div></div></header>
@@ -191,10 +269,10 @@ function App(){
  {view==='overview'&&role==='frontdesk'&&<div className="wf-view-banner"><strong>RECEPTION CONSOLE</strong> — Guest intake, room status and reception dispatch. Specialist repairs belong to management.</div>}
  {view==='overview'&&role==='manager'&&<div className="wf-view-banner"><strong>MANAGER OPERATIONS</strong> — Staff dispatch, escalations and team oversight.</div>}
  {view==='overview'&&role==='supervisor'&&<div className="wf-view-banner"><strong>HOUSEKEEPING SUPERVISOR</strong> — Cleaning approvals and inspections only.</div>}
- {view==='overview'&&<section className="card shift-card" aria-live="polite"><div><b>{lang==='en'?'My automatic work shift':'Mi turno automático'}</b><small>{shiftEnd?'Working since login · '+new Date(currentShift?.shift_started_at||'').toLocaleTimeString()+' · Shift ends '+new Date(shiftEnd).toLocaleTimeString():'Shift starts on sign-in and ends automatically.'}</small></div><ShiftCountdown until={shiftEnd}/></section>}
+ {view==='overview'&&<section className="card shift-card" aria-live="polite"><div><b>{demoMode?(lang==='en'?'Demo workspace':'Espacio de demostración'):(lang==='en'?'My automatic work shift':'Mi turno automático')}</b><small>{demoMode?(lang==='en'?'Demo mode is on · No shift expiry':'Modo demo activo · El turno no caduca'):shiftEnd?'Working since login · '+new Date(currentShift?.shift_started_at||'').toLocaleTimeString()+' · Shift ends '+new Date(shiftEnd).toLocaleTimeString():'Shift starts on sign-in and ends automatically.'}</small></div>{demoMode?<Pill tone="tone-ready">DEMO · ALWAYS ON</Pill>:<div className="shift-actions"><ShiftCountdown until={shiftEnd}/>{['housekeeping','maintenance','frontdesk','supervisor'].includes(role)&&!shiftActive&&<button type="button" className="button primary" disabled={busy} onClick={()=>void startShift()}>{busy?'Starting…':lang==='en'?'Start shift':'Iniciar turno'}</button>}</div>}</section>}
  {view==='overview'&&(['housekeeping','maintenance'].includes(role)?<>
-  <div className="stats"><Stat icon={<ClipboardCheck/>} label={lang==='en'?'My assigned jobs':'Mis tareas asignadas'} value={data.tasks.filter(k=>k.assigned_to===session.user.id).length} detail={t.work}/><Stat icon={<Clock/>} label={t.open} value={data.tasks.filter(k=>k.status==='open').length} detail={t.pending}/><Stat icon={<Wrench/>} label={t.doing} value={data.tasks.filter(k=>k.status==='doing').length} detail={t.live}/><Stat icon={<CheckCircle2/>} label={t.done} value={data.tasks.filter(k=>k.status==='done').length} detail={t.roomBoard}/></div>
-  <section className="card"><div className="cardhead"><div><small>{roleLabel[role]}</small><h2>{lang==='en'?'My work queue':'Mis tareas pendientes'}</h2></div><Pill>{pending.length}</Pill></div>{taskCards(pending.filter(k=>k.assigned_to===session.user.id||k.created_by===session.user.id))}</section>
+  <div className="stats"><Stat icon={<ClipboardCheck/>} label={lang==='en'?'My department queue':'Cola de mi departamento'} value={workerQueue.length} detail={lang==='en'?'Assigned + waiting jobs':'Tareas asignadas y en espera'}/><Stat icon={<Clock/>} label={t.open} value={workerQueue.filter(k=>k.status==='open').length} detail={t.pending}/><Stat icon={<Wrench/>} label={t.doing} value={workerQueue.filter(k=>k.status==='doing').length} detail={t.live}/><Stat icon={<CheckCircle2/>} label={t.done} value={data.tasks.filter(k=>k.assigned_to===session.user.id&&k.status==='done').length} detail={t.roomBoard}/></div>
+  <section className="card"><div className="cardhead"><div><small>{roleLabel[role]}</small><h2>{lang==='en'?'My work queue':'Mis tareas pendientes'}</h2></div><Pill>{workerQueue.length}</Pill></div>{taskCards(workerQueue)}</section>
   <section className="card private-help"><h2>{lang==='en'?'Need help or supplies?':'¿Necesitas ayuda o suministros?'}</h2><p>{lang==='en'?'Message the front desk or owner privately.':'Escribe a recepción o al propietario en privado.'}</p><button className="button outline" onClick={()=>{setChatMode('frontdesk');setView('messages')}}><MessageSquare size={16}/>{lang==='en'?'Message Front Desk':'Escribir a recepción'}</button></section>
   </>:<><CasaOverview lang={lang} hotelName={display} rooms={data.rooms} tasks={data.tasks} alerts={data.alerts} members={data.memberships} dispatch={data.staffDispatch} events={data.activity} onRoom={setRoomId} onRooms={()=>setView('rooms')} onTasks={()=>{setView(permitted.includes('requests')?'requests':'cleaning');setStatusFilter('open')}} onChat={()=>{setChatMode('common');setView('messages')}} onAdd={canManage?()=>setModal('room'):undefined} onQR={canDesk?()=>{setQrRoomId('');setModal('qr')}:undefined}/></>)}
  {view==='rooms'&&<CasaRoomBoard lang={lang} rooms={data.rooms} tasks={data.tasks} events={data.activity} canManage={canManage} canDesk={canDesk} onRoom={setRoomId} onAdd={canManage?()=>setModal('room'):undefined} onQR={canDesk?()=>{setQrRoomId('');setModal('qr')}:undefined}/>}
@@ -283,7 +361,7 @@ function DispatchModal({lang,member,profile,close,save}:{lang:'en'|'es',member:M
  </form>
  </Modal>
 }
-function Auth({lang,setLang,theme,setTheme,notify}:{lang:'en'|'es',setLang:(v:'en'|'es')=>void,theme:string,setTheme:(v:string)=>void,notify:(v:string)=>void}){
+function Auth({lang,setLang,theme,setTheme,notify,onAuthenticated}:{lang:'en'|'es',setLang:(v:'en'|'es')=>void,theme:string,setTheme:(v:string)=>void,notify:(v:string)=>void,onAuthenticated:(session:any)=>void}){
  const t=labels[lang];
  const [signUp,setSignUp]=useState(false),[email,setEmail]=useState(''),[password,setPassword]=useState('');
  const [working,setWorking]=useState(false),[notice,setNotice]=useState<{kind:'error'|'success'|'info',text:string}|null>(null),[pendingEmail,setPendingEmail]=useState('');
@@ -314,22 +392,17 @@ function Auth({lang,setLang,theme,setTheme,notify}:{lang:'en'|'es',setLang:(v:'e
     const {data,error}=await db.auth.signUp({email:normalized,password,options:{emailRedirectTo:confirmLink()}});
     if(error)throw error;
     if(data.session){
+     onAuthenticated(data.session);
      feedback('success',lang==='en'?'Account created and signed in.':'Cuenta creada y sesión iniciada.');
     }else{
      setPendingEmail(normalized);
      feedback('success',lang==='en'?'Account request received. Check your email for the verification link, click it, then return here to sign in. Your account cannot sign in until verified.':'Solicitud recibida. Revise su correo, abra el enlace de verificación y vuelva aquí para iniciar sesión. No podrá acceder hasta verificar su cuenta.');
     }
    }else{
-    window.sessionStorage.setItem('casaflow-signin-pending','1');
-    try{
-     const {data:login,error}=await db.auth.signInWithPassword({email:normalized,password});
-     if(error)throw error;
-     const {data:members,error:memberError}=await db.from('memberships').select('hotel_id').eq('user_id',login.user.id).eq('active',true).limit(1);
-     if(memberError)throw memberError;
-     if(members?.length)await rpc('begin_work_shift',{p_hotel:members[0].hotel_id});
-     feedback('success',lang==='en'?'Signed in — your work shift has started.':'Sesión iniciada; comenzó su turno.');
-    }catch(err){await db.auth.signOut().catch(()=>null);throw err}
-    finally{window.sessionStorage.removeItem('casaflow-signin-pending');window.dispatchEvent(new Event('casaflow-shift-started'))}
+    const {data:login,error}=await db.auth.signInWithPassword({email:normalized,password});
+    if(error)throw error;
+    onAuthenticated(login.session);
+    feedback('success',lang==='en'?'Signed in — opening your workspace…':'Sesión iniciada; abriendo su espacio…');
    }
   }catch(err:any){
    const code=err?.code||'';
@@ -343,16 +416,14 @@ function Auth({lang,setLang,theme,setTheme,notify}:{lang:'en'|'es',setLang:(v:'e
    }
   }finally{setWorking(false)}
  };
+ if(working&&!resetMode&&!signUp)return <div className="authpage"><div className="authcard"><div className="logo large"><Building2/></div><h1>CasaFlow</h1><Loader2 className="spin" size={28}/><p role="status" aria-live="polite">{lang==='en'?'Verifying your sign-in securely…':'Verificando su acceso de forma segura…'}</p></div></div>;
  return <div className="authpage"><div className="authcard">
   <div className="authheader"><div className="logo large"><Building2/></div>
    <button type="button" className="headerbtn" onClick={()=>setLang(lang==='en'?'es':'en')}>{lang==='en'?'ES':'EN'}</button>
    <button type="button" className="headerbtn" onClick={()=>setTheme(theme==='dark'?'light':'dark')}>{theme==='dark'?<Sun size={17}/>:<Moon size={17}/>}</button>
   </div>
   <h1>CasaFlow</h1><p>{t.allDepartments}</p>
-  {!resetMode?<div className="authswitch">
-   <button type="button" className={!signUp?'selected':''} onClick={()=>{setSignUp(false);resetView()}}>{t.login}</button>
-   <button type="button" className={signUp?'selected':''} onClick={()=>{setSignUp(true);resetView()}}>{t.signup}</button>
-  </div>:<h2>{lang==='en'?'Reset your password':'Restablecer contraseña'}</h2>}
+  {resetMode&&<h2>{lang==='en'?'Reset your password':'Restablecer contraseña'}</h2>}
   <form className="form" onSubmit={submit}>
    <label>{t.email}<div className="inputicon"><Mail size={17}/><input type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="team@hotel.com"/></div></label>
    {!resetMode&&<label>{t.password}<div className="inputicon"><Lock size={17}/><input type="password" required minLength={8} autoComplete={signUp?'new-password':'current-password'} value={password} onChange={e=>setPassword(e.target.value)}/></div></label>}
@@ -363,7 +434,7 @@ function Auth({lang,setLang,theme,setTheme,notify}:{lang:'en'|'es',setLang:(v:'e
   <div className="auth-links">
    {resetMode?<button type="button" onClick={resetView}>{lang==='en'?'Back to sign in':'Volver a iniciar sesión'}</button>:<button type="button" onClick={()=>{setResetMode(true);setPendingEmail('');setNotice(null)}}>{lang==='en'?'Forgot password?':'¿Olvidó su contraseña?'}</button>}
   </div>
-  <a className="button outline full dev-link" href="/dev"><Users size={17}/>{t.openDemo}</a><p className="tiny">{t.allDepartments}. {lang==='en'?'New accounts must verify their email before signing in.':'Las cuentas nuevas deben verificar el correo antes de iniciar sesión.'}</p>
+  <a className="button outline full dev-link" href="/dev"><Users size={17}/>{t.openDemo}</a><p className="tiny">{lang==='en'?'Sign in to open your hotel workspace.':'Inicie sesión para abrir el espacio de su hotel.'}</p>
  </div></div>
 }
 function Onboard({t,lang,theme,setTheme,setLang,onJoined,notify}:{t:L,lang:string,theme:string,setTheme:(v:string)=>void,setLang:(v:any)=>void,onJoined:(h:string)=>void,notify:(v:string)=>void}){const [name,setName]=useState(''),[city,setCity]=useState(''),[token,setToken]=useState(new URLSearchParams(location.search).get('invite')||''),[person,setPerson]=useState(''),[working,setWorking]=useState(false),[onboardError,setOnboardError]=useState('');const submit=async(method:'create'|'join')=>{setOnboardError('');setWorking(true);try{const h=method==='create'?await rpc<string>('create_hotel',{p_name:name,p_city:city}):await rpc<string>('accept_staff_invite',{p_token:token,p_display_name:person});await rpc('begin_work_shift',{p_hotel:h});onJoined(h);history.replaceState(null,'','/')}catch(e:any){setOnboardError(e.message||'Unable to complete setup')}finally{setWorking(false)}};return <div className="authpage"><div className="onboarding"><div className="authheader"><div className="logo large"><Building2/></div><button className="headerbtn" onClick={()=>setLang(lang==='en'?'es':'en')}>{lang==='en'?'ES':'EN'}</button><button className="headerbtn" onClick={()=>setTheme(theme==='dark'?'light':'dark')}>{theme==='dark'?<Sun size={17}/>:<Moon size={17}/>}</button></div><h1>{t.newHotel}</h1><p>{t.noHotel}</p><div className="onboardgrid"><section className="card"><h2>{t.createHotel}</h2><form className="form" onSubmit={e=>{e.preventDefault();void submit('create')}}><label>{t.enterName}<input minLength={2} required value={name} onChange={e=>setName(e.target.value)}/></label><label>{t.enterCity}<input value={city} onChange={e=>setCity(e.target.value)}/></label><button className="button primary full" disabled={working}>{t.createHotel}</button></form></section><section className="card"><h2>{t.joinHotel}</h2><form className="form" onSubmit={e=>{e.preventDefault();void submit('join')}}><label>{t.name}<input required minLength={2} value={person} onChange={e=>setPerson(e.target.value)}/></label><label>{t.inviteLink}<input required value={token} onChange={e=>setToken(e.target.value)}/></label><button className="button outline full" disabled={working}>{t.join}</button></form></section></div>{onboardError&&<div className="auth-notice error" role="alert">{onboardError}</div>}</div></div>}
@@ -376,14 +447,18 @@ const guestCategories=[
 ] as const;
 function Guest({lang,setLang,theme,setTheme}:{lang:'en'|'es',setLang:(v:'en'|'es')=>void,theme:string,setTheme:(v:string)=>void}){
  const token=new URLSearchParams(location.search).get('token')||'';
- const[selection,setSelection]=useState<(typeof guestCategories)[number]['id']>('extra_towels'),[detail,setDetail]=useState(''),[urgent,setUrgent]=useState(false),[done,setDone]=useState(false),[working,setWorking]=useState(false),[err,setErr]=useState('');
+ const storageKey='casaflow-guest-track-'+token.slice(0,16);
+ const[selection,setSelection]=useState<(typeof guestCategories)[number]['id']>('extra_towels'),[detail,setDetail]=useState(''),[urgent,setUrgent]=useState(false),[tracking,setTracking]=useState<string>(()=>{try{return sessionStorage.getItem(storageKey)||''}catch{return ''}}),[ticket,setTicket]=useState<any>(null),[feedback,setFeedback]=useState<boolean|null>(null),[comment,setComment]=useState(''),[working,setWorking]=useState(false),[err,setErr]=useState('');
  const[roomInfo,setRoomInfo]=useState<{hotel:string,room:string}|null>(null),[roomError,setRoomError]=useState(''),[loading,setLoading]=useState(true);
  const en=lang==='en';const category=guestCategories.find(c=>c.id===selection)!;
+ const refreshTicket=async(key:string)=>{const value=await rpc<any>('guest_ticket_status',{p_tracking_token:key});setTicket(value)};
  useEffect(()=>{let alive=true;setLoading(true);rpc<{hotel:string,room:string}>('guest_room_info',{p_token:token}).then(r=>{if(alive){setRoomInfo(r);setRoomError('')}}).catch(e=>{if(alive){setRoomError(e.message||'Invalid QR')}}).finally(()=>{if(alive)setLoading(false)});return()=>{alive=false}},[token]);
+ useEffect(()=>{if(!tracking)return;let alive=true;const run=async()=>{try{const value=await rpc<any>('guest_ticket_status',{p_tracking_token:tracking});if(alive)setTicket(value)}catch(e:any){if(alive)setErr(e.message||'Ticket status unavailable')}};void run();const id=window.setInterval(()=>void run(),10000);return()=>{alive=false;window.clearInterval(id)}},[tracking]);
+ const stageLabel=(stage:string)=>({submitted:en?'Received': 'Recibida',queued:en?'Queued':'En cola',accepted:en?'Accepted':'Aceptada',in_progress:en?'In progress':'En progreso',awaiting_guest:en?'Completed — awaiting your confirmation':'Completada — esperando su confirmación',confirmed:en?'Resolved':'Resuelta',reopened:en?'Reopened':'Reabierta'}[stage]||stage?.replaceAll('_',' ')||'');
  return <div className="authpage"><div className="authcard guest guest-categories">
   <div className="authheader"><div className="logo large"><HandPlatter/></div><button className="headerbtn" onClick={()=>setLang(en?'es':'en')}>{en?'ES':'EN'}</button><button className="headerbtn" onClick={()=>setTheme(theme==='dark'?'light':'dark')}>{theme==='dark'?<Sun size={17}/>:<Moon size={17}/>}</button></div>
-  <h1>{en?'How can we help?':'¿En qué podemos ayudar?'}</h1><p>{loading?(en?'Checking room QR…':'Verificando QR…'):roomInfo?`${roomInfo.hotel} · ${en?'Room':'Habitación'} ${roomInfo.room}`:roomError}</p>
-  {!loading&&roomInfo&&!done&&<form className="form" onSubmit={async e=>{e.preventDefault();setErr('');setWorking(true);try{await rpc('submit_guest_request',{p_token:token,p_category:selection,p_detail:detail,p_urgent:urgent});setDone(true)}catch(e:any){setErr(e.message||'Request could not be submitted')}finally{setWorking(false)}}}>
+  <h1>{en?'How can we help?':'¿En qué podemos ayudar?'}</h1><p>{loading?(en?'Checking room QR…':'Verificando QR…'):roomInfo?roomInfo.hotel+' · '+(en?'Room ':'Habitación ')+roomInfo.room:roomError}</p>
+  {!loading&&roomInfo&&!tracking&&<form className="form" onSubmit={async e=>{e.preventDefault();setErr('');setWorking(true);try{const result=await rpc<{task_id:string,tracking_token:string}>('submit_guest_request_tracked',{p_token:token,p_category:selection,p_detail:detail,p_urgent:urgent});sessionStorage.setItem(storageKey,result.tracking_token);setTracking(result.tracking_token)}catch(e:any){setErr(e.message||'Request could not be submitted')}finally{setWorking(false)}}}>
    <div className="guest-choice-list" role="radiogroup" aria-label={en?'Request category':'Tipo de solicitud'}>{guestCategories.map(c=><label className={'guest-choice '+(selection===c.id?'chosen':'')} key={c.id}><input type="radio" name="guest-category" checked={selection===c.id} onChange={()=>{setSelection(c.id);setUrgent(false)}}/><span aria-hidden>{c.icon}</span><strong>{en?c.en:c.es}</strong><CheckCircle2 size={19}/></label>)}</div>
    <div className="guest-routed"><small>{en?'Automatically routed to':'Enviado automáticamente a'}</small><b>{category.dept==='housekeeping'?(en?'Housekeeping':'Limpieza'):category.dept==='maintenance'?(en?'Maintenance':'Mantenimiento'):(en?'Front desk':'Recepción')}</b></div>
    <label>{en?'Extra details (optional)':'Detalles adicionales (opcional)'}<textarea maxLength={1200} rows={3} value={detail} onChange={e=>setDetail(e.target.value)} placeholder={en?'Tell us what happened…':'Describa lo que sucedió…'}/></label>
@@ -392,9 +467,16 @@ function Guest({lang,setLang,theme,setTheme}:{lang:'en'|'es',setLang:(v:'en'|'es
    <button disabled={working} className="button primary full">{working?(en?'Sending…':'Enviando…'):(en?'Send request':'Enviar solicitud')}<Send size={16}/></button>
    {err&&<p role="alert" className="error">{err}</p>}
   </form>}
-  {done&&<div className="success" role="status"><CheckCircle2 size={40}/><h2>{en?'Request received':'Solicitud recibida'}</h2><p>{en?'Your request went directly to the responsible department.':'Su solicitud fue enviada directamente al departamento responsable.'}</p></div>}
+  {tracking&&<section className="form" aria-live="polite"><div className="success"><CheckCircle2 size={36}/><h2>{en?'Request tracking':'Seguimiento de solicitud'}</h2><p>{ticket?stageLabel(ticket.stage):en?'Loading your request…':'Cargando su solicitud…'}</p></div>
+   {ticket&&<><div className="guest-routed"><small>{en?'Request':'Solicitud'}</small><b>{ticket.title||ticket.category}</b><small>{en?'Room':'Habitación'} {ticket.room}</small></div>
+    <p className="tiny">{en?'Status updates automatically. Keep this page open or return using this browser session.':'El estado se actualiza automáticamente. Mantenga esta página abierta.'}</p>
+    {ticket.stage==='awaiting_guest'&&<><label>{en?'Optional feedback':'Comentario opcional'}<textarea rows={2} maxLength={600} value={comment} onChange={e=>setComment(e.target.value)}/></label><div className="qr-actions"><button className="button primary" disabled={working} onClick={async()=>{setWorking(true);try{const value=await rpc<any>('guest_ticket_feedback',{p_tracking_token:tracking,p_resolved:true,p_comment:comment});setTicket(value)}catch(e:any){setErr(e.message||'Feedback failed')}finally{setWorking(false)}}}>{en?'Yes, resolved':'Sí, resuelto'}</button><button className="button outline" disabled={working} onClick={async()=>{setWorking(true);try{const value=await rpc<any>('guest_ticket_feedback',{p_tracking_token:tracking,p_resolved:false,p_comment:comment});setTicket(value)}catch(e:any){setErr(e.message||'Feedback failed')}finally{setWorking(false)}}}>{en?'Not resolved':'No resuelto'}</button></div></>}
+    {ticket.stage==='confirmed'&&<p className="success">{en?'Thank you for confirming. Your request is closed.':'Gracias por confirmar. Su solicitud está cerrada.'}</p>}
+   </>}
+   {err&&<p className="error" role="alert">{err}</p>}
+  </section>}
   {roomError&&<p className="error">{en?'Ask the front desk for a replacement room QR.':'Solicite un nuevo QR en recepción.'}</p>}
   <p className="tiny">{en?'Requests are limited to prevent misuse. For medical emergencies, contact emergency services or the front desk directly.':'Las solicitudes tienen límites. En caso de emergencia médica contacte a emergencias o recepción.'}</p>
  </div></div>
 }
-createRoot(document.getElementById('root')!).render(<App/>);
+createRoot(document.getElementById('root')!).render(<React.Suspense fallback={<div className="authpage"><Loader2 className="spin" size={30}/><p>Loading CasaFlow…</p></div>}>{location.pathname==='/demo-launch'?<DemoLaunch/>:<App/>}</React.Suspense>);

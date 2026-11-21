@@ -19,3 +19,21 @@ test('manager sets verified skills; login automatically starts employee shifts',
 test('bulk printable QRs are limited to 60 and never replace existing labels',()=>{assert.match(sqlBulk,/p_limit>60/);assert.match(sqlBulk,/c\.room_id is null/);assert.match(ui,/issue_room_qrs_bulk/)});
 test('guest QR and staff metadata use role-filtered RLS',()=>{assert.match(sql,/alter table public\.room_qr_codes enable row level security/);assert.match(sql,/alter table public\.guest_request_meta enable row level security/);assert.match(db,/from\('ops_alerts'\)/)});
 test('room-specific QR printer uses selected room, not first room',()=>{assert.match(ui,/initialRoom=\{qrRoomId\}/);assert.match(ui,/setQrRoomId\(room\.id\)/);assert.match(ui,/useState\(initialRoom\|\|rooms\[0\]\?\.id/)});
+
+const offlineVisibility=readFileSync(new URL('../supabase/20261121111827_preserve_offline_task_visibility_and_department_queues.sql',import.meta.url),'utf8');
+test('offline technicians can still read their assigned open tasks',()=>{
+ assert.match(offlineVisibility,/or assigned_to = \(select auth\.uid\(\)\)/);
+ assert.match(offlineVisibility,/assigned_to is null[\s\S]*status in \('open','doing'\)/);
+});
+test('unassigned AC guest requests remain visible only to maintenance staff with verified AC skill',()=>{
+ assert.match(offlineVisibility,/gm\.category = 'broken_ac'[\s\S]*'ac' = any\(sd\.verified_skills\)/);
+ assert.match(offlineVisibility,/gm\.department = 'maintenance'[\s\S]*app_private\.can_role\(hotel_id, array\['maintenance'\]/);
+});
+test('offline queue access does not remove write-side shift guards',()=>{
+ assert.match(offlineVisibility,/for select to authenticated/);
+ assert.match(offlineVisibility,/for select to authenticated/);
+ assert.doesNotMatch(offlineVisibility,/for (insert|update|delete)/i);
+});
+test('technicians can see room details for rooms containing tasks visible to them',()=>{
+ assert.match(offlineVisibility,/create policy rooms_read[\s\S]*exists \([\s\S]*from public\.tasks t[\s\S]*t\.room_id = rooms\.id/);
+});
