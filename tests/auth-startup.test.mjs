@@ -53,3 +53,6 @@ test('sign-in screen has no create-account toggle',()=>{
  const auth=main.slice(main.indexOf('function Auth('),main.indexOf('function Onboard('));
  assert.doesNotMatch(auth,/className="authswitch"/);
 });
+test('joining or creating a hotel immediately rechecks the new membership',()=>{
+ assert.match(main,/hotelRef\.current=id;hotelStorage\.setItem\('casaflow-hotel',id\);setHotel\(id\);setMembershipState\('checking'\);void load\(\)/);
+});
