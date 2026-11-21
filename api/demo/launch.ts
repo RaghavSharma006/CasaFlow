@@ -62,5 +62,5 @@ export default async function handler(req:Req,res:Res){
  const match=members?.some(m=>m.role===selected.expectedRole);
  if(memberError||!match){await supabase.auth.signOut({scope:'local'});return res.status(403).json({error:'Demo account is not assigned to the isolated demo workspace with the required role.'})}
  consumedTickets.set(claims.jti!,claims.exp!*1000);
- return res.status(200).json({access_token:data.session.access_token,refresh_token:data.session.refresh_token,expires_at:data.session.expires_at});
+ return res.status(200).json({access_token:data.session.access_token,refresh_token:data.session.refresh_token,expires_at:data.session.expires_at,demo_mode:true});
 }
