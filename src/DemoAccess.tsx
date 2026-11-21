@@ -1,8 +1,13 @@
-import React,{useEffect,useState} from 'react';
+import React,{useEffect,useState,useRef} from 'react';
 import QRCode from 'qrcode';
 import {Building2,CheckCircle2,Clock3,ExternalLink,LogOut,RefreshCw,ShieldCheck,Users} from 'lucide-react';
 import {db,parallelMode} from './db';
 import './demo-access.css';
+
+type TurnstileOptions={sitekey:string,callback:(token:string)=>void,'expired-callback'?:()=>void,'error-callback'?:()=>void};
+declare global { interface Window { turnstile?: { render:(target:HTMLElement,options:TurnstileOptions)=>string, reset:(id?:string)=>void, remove?:(id:string)=>void } } }
+const turnstileSiteKey=(import.meta as any).env?.VITE_DEMO_TURNSTILE_SITE_KEY as string|undefined;
+
 
 const roles=[
  ['owner','Owner','Hotel-wide operations'],['manager','Manager','Staff, dispatch and escalations'],
@@ -15,9 +20,30 @@ const roleRoute:Record<string,string>={owner:'/owner',manager:'/manager',recepti
 export function DemoLauncher(){
  const[active,setActive]=useState(false),[expiresAt,setExpiresAt]=useState(''),[guestUrl,setGuestUrl]=useState(''),[qr,setQr]=useState('');
  const[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ const[turnstileToken,setTurnstileToken]=useState('');const turnstileRef=useRef<HTMLDivElement>(null);const widgetId=useRef<string|undefined>(undefined);
  useEffect(()=>{
   const cached=sessionStorage.getItem('casaflow-demo-guest-url')||'';if(cached)setGuestUrl(cached);
   fetch('/api/demo/status',{cache:'no-store',credentials:'same-origin'}).then(r=>r.json()).then(v=>{if(v.active){setActive(true);setExpiresAt(v.expiresAt||'')}}).catch(()=>{});
+ },[]);
+ useEffect(()=>{
+  if(!turnstileSiteKey)return;
+  let cancelled=false;
+  const renderWidget=()=>{
+   if(cancelled||!window.turnstile||!turnstileRef.current||widgetId.current)return;
+   widgetId.current=window.turnstile.render(turnstileRef.current,{
+    sitekey:turnstileSiteKey,
+    callback:(token)=>setTurnstileToken(token),
+    'expired-callback':()=>setTurnstileToken(''),
+    'error-callback':()=>setTurnstileToken(''),
+   });
+  };
+  let script=document.querySelector<HTMLScriptElement>('script[data-cf-turnstile]');
+  if(window.turnstile)renderWidget();
+  else if(script){script.addEventListener('load',renderWidget);script.addEventListener('error',()=>setError('Security check could not load. Refresh and try again.'),{once:true});}
+  else {
+   script=document.createElement('script');script.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';script.async=true;script.defer=true;script.dataset.cfTurnstile='true';script.addEventListener('load',renderWidget,{once:true});script.addEventListener('error',()=>setError('Security check could not load. Refresh and try again.'),{once:true});document.head.appendChild(script);
+  }
+  return()=>{cancelled=true;if(widgetId.current&&window.turnstile?.remove)window.turnstile.remove(widgetId.current);widgetId.current=undefined};
  },[]);
  useEffect(()=>{
   if(!guestUrl){setQr('');return}
@@ -26,7 +52,7 @@ export function DemoLauncher(){
  async function startDemo(){
   if(busy)return;setBusy(true);setError('');setNotice('');
   try{
-   const response=await fetch('/api/demo/start',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({})});
+   const response=await fetch('/api/demo/start',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({turnstileToken})});
    const body=await response.json();if(!response.ok)throw new Error(body.error||'Unable to start the demo.');
    setActive(true);setExpiresAt(body.expiresAt||'');
    if(body.sampleGuestUrl){setGuestUrl(body.sampleGuestUrl);sessionStorage.setItem('casaflow-demo-guest-url',body.sampleGuestUrl)}
@@ -54,7 +80,8 @@ export function DemoLauncher(){
    <p className="demo-access-eyebrow">TRY THE REAL PRODUCT</p>
    <h1>One hotel. Eight roles. Your own private workspace.</h1>
    <p>Explore the live CasaFlow application using a temporary hotel workspace created just for this browser. Every role has its own real account and permissions. Other visitors cannot see your demo data.</p>
-   {!active?<button className="demo-access-primary" disabled={busy} onClick={()=>void startDemo()}>{busy?<RefreshCw className="demo-access-spin" size={17}/>:<Users size={17}/>} {busy?'Preparing your hotel…':'Start my interactive demo'}</button>
+   {!active?{turnstileSiteKey&&<div className="demo-access-turnstile" ref={turnstileRef} aria-label="Complete the security check"/>}
+   <button className="demo-access-primary" disabled={busy||(!!turnstileSiteKey&&!turnstileToken)} onClick={()=>void startDemo()}>{busy?<RefreshCw className="demo-access-spin" size={17}/>:<Users size={17}/>} {busy?'Preparing your hotel…':'Start my interactive demo'}</button>
    :<div className="demo-access-active"><CheckCircle2 size={18}/><div><b>Your demo hotel is ready</b><small>{expiresAt?'Automatically expires '+new Date(expiresAt).toLocaleTimeString():'Temporary session active'}</small></div></div>}
    {error&&<p className="demo-access-error" role="alert">{error}</p>}{notice&&<p className="demo-access-notice" role="status">{notice}</p>}
   </section>
