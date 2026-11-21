@@ -20,7 +20,7 @@ test('bulk printable QRs are limited to 60 and never replace existing labels',()
 test('guest QR and staff metadata use role-filtered RLS',()=>{assert.match(sql,/alter table public\.room_qr_codes enable row level security/);assert.match(sql,/alter table public\.guest_request_meta enable row level security/);assert.match(db,/from\('ops_alerts'\)/)});
 test('room-specific QR printer uses selected room, not first room',()=>{assert.match(ui,/initialRoom=\{qrRoomId\}/);assert.match(ui,/setQrRoomId\(room\.id\)/);assert.match(ui,/useState\(initialRoom\|\|rooms\[0\]\?\.id/)});
 
-const offlineVisibility=readFileSync(new URL('../supabase/20261121_preserve_offline_task_visibility.sql',import.meta.url),'utf8');
+const offlineVisibility=readFileSync(new URL('../supabase/20261121111827_preserve_offline_task_visibility_and_department_queues.sql',import.meta.url),'utf8');
 test('offline technicians can still read their assigned open tasks',()=>{
  assert.match(offlineVisibility,/or assigned_to = \(select auth\.uid\(\)\)/);
  assert.match(offlineVisibility,/assigned_to is null[\s\S]*status in \('open','doing'\)/);
