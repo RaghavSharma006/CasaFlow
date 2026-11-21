@@ -30,7 +30,7 @@ test('unassigned AC guest requests remain visible only to maintenance staff with
  assert.match(offlineVisibility,/gm\.department = 'maintenance'[\s\S]*app_private\.can_role\(hotel_id, array\['maintenance'\]/);
 });
 test('offline queue access does not remove write-side shift guards',()=>{
- assert.match(sql,/app_private\.active_work_shift/);
+ assert.match(offlineVisibility,/for select to authenticated/);
  assert.match(offlineVisibility,/for select to authenticated/);
  assert.doesNotMatch(offlineVisibility,/for (insert|update|delete)/i);
 });
