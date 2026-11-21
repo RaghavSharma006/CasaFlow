@@ -48,8 +48,8 @@ function App(){
   if(!db||signingOut)return;
   setSigningOut(true);
   try{
-   if(hotel){try{await rpc('end_work_shift',{p_hotel:hotel})}catch{/* The scheduled expiry worker will finalize an offline sign-out. */}}
-   const {error}=await db.auth.signOut();
+   if(hotel&&!parallelMode){try{await rpc('end_work_shift',{p_hotel:hotel})}catch{/* The scheduled expiry worker will finalize an offline sign-out. */}}
+   const {error}=await db.auth.signOut(parallelMode?{scope:'local'}:undefined);
    if(error)throw error;
    setSession(null);setHotel(null);setMenu(false);setMoreOpen(false);
    hotelStorage.removeItem('casaflow-hotel');
@@ -68,7 +68,7 @@ function App(){
     if(!memberships.length){setHotel(null);setData(d=>({...d,memberships:[]}));setSync('live');return}
     const valid=memberships.some(m=>m.hotel_id===hotel)?hotel:memberships[0].hotel_id;
     if(valid!==hotel){setHotel(valid);hotelStorage.setItem('casaflow-hotel',valid!);return}
-    if(!window.sessionStorage.getItem('casaflow-signin-pending')){
+    if(!parallelMode&&!window.sessionStorage.getItem('casaflow-signin-pending')){
      const shift=await db.from('staff_dispatch').select('shift_started_at,shift_ends_at,on_shift').eq('hotel_id',valid!).eq('user_id',session.user.id).maybeSingle();
      if(shift.error)throw shift.error;
      if(!shift.data?.shift_started_at){await rpc('begin_work_shift',{p_hotel:valid!})}
@@ -118,13 +118,13 @@ function App(){
  const currentShift=data.staffDispatch.find(d=>d.user_id===session?.user?.id&&d.hotel_id===hotel);
  const shiftEnd=currentShift?.shift_ends_at||null;
  useEffect(()=>{
-  if(!db||!session?.user||!hotel||!shiftEnd)return;
+  if(!db||!session?.user||!hotel||!shiftEnd||parallelMode)return;
   let expired=false;
   const check=async()=>{
    if(expired||window.sessionStorage.getItem('casaflow-signin-pending')||Date.parse(shiftEnd)>Date.now())return;
    expired=true;
    try{await rpc('end_work_shift',{p_hotel:hotel})}catch{/* cron will handle reallocation if offline */}
-   await db?.auth.signOut().catch(()=>null);
+   await db?.auth.signOut(parallelMode?{scope:'local'}:undefined).catch(()=>null);
    setSession(null);setHotel(null);hotelStorage.removeItem('casaflow-hotel');notify('Shift finished. You have been signed out automatically.');
   };
   const id=window.setInterval(()=>void check(),1000);
@@ -376,14 +376,18 @@ const guestCategories=[
 ] as const;
 function Guest({lang,setLang,theme,setTheme}:{lang:'en'|'es',setLang:(v:'en'|'es')=>void,theme:string,setTheme:(v:string)=>void}){
  const token=new URLSearchParams(location.search).get('token')||'';
- const[selection,setSelection]=useState<(typeof guestCategories)[number]['id']>('extra_towels'),[detail,setDetail]=useState(''),[urgent,setUrgent]=useState(false),[done,setDone]=useState(false),[working,setWorking]=useState(false),[err,setErr]=useState('');
+ const storageKey='casaflow-guest-track-'+token.slice(0,16);
+ const[selection,setSelection]=useState<(typeof guestCategories)[number]['id']>('extra_towels'),[detail,setDetail]=useState(''),[urgent,setUrgent]=useState(false),[tracking,setTracking]=useState<string>(()=>{try{return sessionStorage.getItem(storageKey)||''}catch{return ''}}),[ticket,setTicket]=useState<any>(null),[feedback,setFeedback]=useState<boolean|null>(null),[comment,setComment]=useState(''),[working,setWorking]=useState(false),[err,setErr]=useState('');
  const[roomInfo,setRoomInfo]=useState<{hotel:string,room:string}|null>(null),[roomError,setRoomError]=useState(''),[loading,setLoading]=useState(true);
  const en=lang==='en';const category=guestCategories.find(c=>c.id===selection)!;
+ const refreshTicket=async(key:string)=>{const value=await rpc<any>('guest_ticket_status',{p_tracking_token:key});setTicket(value)};
  useEffect(()=>{let alive=true;setLoading(true);rpc<{hotel:string,room:string}>('guest_room_info',{p_token:token}).then(r=>{if(alive){setRoomInfo(r);setRoomError('')}}).catch(e=>{if(alive){setRoomError(e.message||'Invalid QR')}}).finally(()=>{if(alive)setLoading(false)});return()=>{alive=false}},[token]);
+ useEffect(()=>{if(!tracking)return;let alive=true;const run=async()=>{try{const value=await rpc<any>('guest_ticket_status',{p_tracking_token:tracking});if(alive)setTicket(value)}catch(e:any){if(alive)setErr(e.message||'Ticket status unavailable')}};void run();const id=window.setInterval(()=>void run(),10000);return()=>{alive=false;window.clearInterval(id)}},[tracking]);
+ const stageLabel=(stage:string)=>({submitted:en?'Received': 'Recibida',queued:en?'Queued':'En cola',accepted:en?'Accepted':'Aceptada',in_progress:en?'In progress':'En progreso',awaiting_guest:en?'Completed — awaiting your confirmation':'Completada — esperando su confirmación',confirmed:en?'Resolved':'Resuelta',reopened:en?'Reopened':'Reabierta'}[stage]||stage?.replaceAll('_',' ')||'');
  return <div className="authpage"><div className="authcard guest guest-categories">
   <div className="authheader"><div className="logo large"><HandPlatter/></div><button className="headerbtn" onClick={()=>setLang(en?'es':'en')}>{en?'ES':'EN'}</button><button className="headerbtn" onClick={()=>setTheme(theme==='dark'?'light':'dark')}>{theme==='dark'?<Sun size={17}/>:<Moon size={17}/>}</button></div>
-  <h1>{en?'How can we help?':'¿En qué podemos ayudar?'}</h1><p>{loading?(en?'Checking room QR…':'Verificando QR…'):roomInfo?`${roomInfo.hotel} · ${en?'Room':'Habitación'} ${roomInfo.room}`:roomError}</p>
-  {!loading&&roomInfo&&!done&&<form className="form" onSubmit={async e=>{e.preventDefault();setErr('');setWorking(true);try{await rpc('submit_guest_request',{p_token:token,p_category:selection,p_detail:detail,p_urgent:urgent});setDone(true)}catch(e:any){setErr(e.message||'Request could not be submitted')}finally{setWorking(false)}}}>
+  <h1>{en?'How can we help?':'¿En qué podemos ayudar?'}</h1><p>{loading?(en?'Checking room QR…':'Verificando QR…'):roomInfo?roomInfo.hotel+' · '+(en?'Room ':'Habitación ')+roomInfo.room:roomError}</p>
+  {!loading&&roomInfo&&!tracking&&<form className="form" onSubmit={async e=>{e.preventDefault();setErr('');setWorking(true);try{const result=await rpc<{task_id:string,tracking_token:string}>('submit_guest_request_tracked',{p_token:token,p_category:selection,p_detail:detail,p_urgent:urgent});sessionStorage.setItem(storageKey,result.tracking_token);setTracking(result.tracking_token)}catch(e:any){setErr(e.message||'Request could not be submitted')}finally{setWorking(false)}}}>
    <div className="guest-choice-list" role="radiogroup" aria-label={en?'Request category':'Tipo de solicitud'}>{guestCategories.map(c=><label className={'guest-choice '+(selection===c.id?'chosen':'')} key={c.id}><input type="radio" name="guest-category" checked={selection===c.id} onChange={()=>{setSelection(c.id);setUrgent(false)}}/><span aria-hidden>{c.icon}</span><strong>{en?c.en:c.es}</strong><CheckCircle2 size={19}/></label>)}</div>
    <div className="guest-routed"><small>{en?'Automatically routed to':'Enviado automáticamente a'}</small><b>{category.dept==='housekeeping'?(en?'Housekeeping':'Limpieza'):category.dept==='maintenance'?(en?'Maintenance':'Mantenimiento'):(en?'Front desk':'Recepción')}</b></div>
    <label>{en?'Extra details (optional)':'Detalles adicionales (opcional)'}<textarea maxLength={1200} rows={3} value={detail} onChange={e=>setDetail(e.target.value)} placeholder={en?'Tell us what happened…':'Describa lo que sucedió…'}/></label>
@@ -392,7 +396,14 @@ function Guest({lang,setLang,theme,setTheme}:{lang:'en'|'es',setLang:(v:'en'|'es
    <button disabled={working} className="button primary full">{working?(en?'Sending…':'Enviando…'):(en?'Send request':'Enviar solicitud')}<Send size={16}/></button>
    {err&&<p role="alert" className="error">{err}</p>}
   </form>}
-  {done&&<div className="success" role="status"><CheckCircle2 size={40}/><h2>{en?'Request received':'Solicitud recibida'}</h2><p>{en?'Your request went directly to the responsible department.':'Su solicitud fue enviada directamente al departamento responsable.'}</p></div>}
+  {tracking&&<section className="form" aria-live="polite"><div className="success"><CheckCircle2 size={36}/><h2>{en?'Request tracking':'Seguimiento de solicitud'}</h2><p>{ticket?stageLabel(ticket.stage):en?'Loading your request…':'Cargando su solicitud…'}</p></div>
+   {ticket&&<><div className="guest-routed"><small>{en?'Request':'Solicitud'}</small><b>{ticket.title||ticket.category}</b><small>{en?'Room':'Habitación'} {ticket.room}</small></div>
+    <p className="tiny">{en?'Status updates automatically. Keep this page open or return using this browser session.':'El estado se actualiza automáticamente. Mantenga esta página abierta.'}</p>
+    {ticket.stage==='awaiting_guest'&&<><label>{en?'Optional feedback':'Comentario opcional'}<textarea rows={2} maxLength={600} value={comment} onChange={e=>setComment(e.target.value)}/></label><div className="qr-actions"><button className="button primary" disabled={working} onClick={async()=>{setWorking(true);try{const value=await rpc<any>('guest_ticket_feedback',{p_tracking_token:tracking,p_resolved:true,p_comment:comment});setTicket(value)}catch(e:any){setErr(e.message||'Feedback failed')}finally{setWorking(false)}}}>{en?'Yes, resolved':'Sí, resuelto'}</button><button className="button outline" disabled={working} onClick={async()=>{setWorking(true);try{const value=await rpc<any>('guest_ticket_feedback',{p_tracking_token:tracking,p_resolved:false,p_comment:comment});setTicket(value)}catch(e:any){setErr(e.message||'Feedback failed')}finally{setWorking(false)}}}>{en?'Not resolved':'No resuelto'}</button></div></>}
+    {ticket.stage==='confirmed'&&<p className="success">{en?'Thank you for confirming. Your request is closed.':'Gracias por confirmar. Su solicitud está cerrada.'}</p>}
+   </>}
+   {err&&<p className="error" role="alert">{err}</p>}
+  </section>}
   {roomError&&<p className="error">{en?'Ask the front desk for a replacement room QR.':'Solicite un nuevo QR en recepción.'}</p>}
   <p className="tiny">{en?'Requests are limited to prevent misuse. For medical emergencies, contact emergency services or the front desk directly.':'Las solicitudes tienen límites. En caso de emergencia médica contacte a emergencias o recepción.'}</p>
  </div></div>
