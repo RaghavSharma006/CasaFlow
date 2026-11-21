@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const main=readFileSync(new URL('../src/main.tsx',import.meta.url),'utf8');
 test('password sign-in hands the authenticated session to the app immediately',()=>{
- const auth=main.slice(main.indexOf('function Auth('),main.indexOf('const guestCategories'));
+ const auth=main.slice(main.indexOf('function Auth('),main.indexOf('function Onboard('));
  assert.match(auth,/signInWithPassword\(\{email:normalized,password\}\)/);
  assert.match(auth,/onAuthenticated\(login\.session\)/);
  assert.doesNotMatch(auth,/from\('memberships'\)|begin_work_shift|casaflow-signin-pending/);
@@ -33,6 +33,6 @@ test('initial auth event wins over a late getSession response',()=>{
  assert.match(main,/if\(!authEventSeen\)setSession\(data.session\)/);
 });
 test('sign-in screen has no create-account toggle',()=>{
- const auth=main.slice(main.indexOf('function Auth('),main.indexOf('const guestCategories'));
+ const auth=main.slice(main.indexOf('function Auth('),main.indexOf('function Onboard('));
  assert.doesNotMatch(auth,/className="authswitch"/);
 });
