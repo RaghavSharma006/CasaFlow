@@ -10,3 +10,5 @@
 .demo-role-loading{min-height:100vh;display:grid;place-items:center;background:var(--cf-demo-paper);font-family:Inter,system-ui,sans-serif;padding:20px}.demo-role-card{background:white;border:1px solid var(--cf-demo-line);border-radius:18px;padding:30px;max-width:420px;width:100%;text-align:center}.demo-role-card h1{font-size:24px;margin:16px 0 7px}.demo-role-card p{color:var(--cf-demo-muted);font-size:14px;line-height:1.6}.demo-role-card a{color:var(--cf-demo-green);font-weight:700}
 .demo-access-spin{animation:cf-demo-spin 1s linear infinite}@keyframes cf-demo-spin{to{transform:rotate(360deg)}}
 @media(max-width:760px){.demo-access-page{padding:18px 15px 44px}.demo-access-hero{margin:54px auto 38px}.demo-access-toolbar{align-items:start;flex-direction:column}.demo-access-roles{grid-template-columns:1fr}.demo-access-guest{padding:20px;flex-direction:column;align-items:start}.demo-access-guest img{width:156px;height:156px}.demo-access-end{align-items:start;flex-direction:column}}
+
+.demo-access-turnstile{margin:20px 0 0;min-height:65px;display:flex;align-items:center}
