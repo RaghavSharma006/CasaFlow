@@ -13,6 +13,7 @@ const guest=read('src/GuestTracking.tsx');
 const main=read('src/main.tsx');
 const launcher=read('parallel.html');
 const vercel=JSON.parse(read('vercel.json'));
+const cleanupWorkflow=read('.github/workflows/demo-cleanup.yml');
 
 test('server-side Supabase secret is used only by API code',()=>{
   assert.match(shared,/SUPABASE_SECRET_KEY/);
@@ -78,8 +79,9 @@ test('public parallel page does not reveal the old shared-account emails',()=>{
   assert.doesNotMatch(launcher,/raghav007ff\+/);
 });
 
-test('Vercel rewrites include public launcher routes and schedule cleanup',()=>{
+test('Vercel rewrites include launcher routes and GitHub Actions schedules cleanup',()=>{
   assert.ok(vercel.rewrites.some(rule=>rule.source==='/demo-launch'));
   assert.ok(vercel.rewrites.some(rule=>rule.source==='/demo-role'));
-  assert.ok(vercel.crons.some(job=>job.path==='/api/demo/cleanup'));
+  assert.match(cleanupWorkflow,/cron: '\*\/15 \* \* \* \*'/);
+  assert.match(cleanupWorkflow,/CASAFLOW_DEMO_CRON_SECRET/);
 });
