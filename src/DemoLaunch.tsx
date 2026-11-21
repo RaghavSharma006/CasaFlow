@@ -26,13 +26,18 @@ export default function DemoLaunch(){
    const response=await fetch('/api/demo/launch',{method:'POST',headers:{'content-type':'application/json'},cache:'no-store',body:JSON.stringify({role,ticket})});
    const result=await response.json();
    if(!response.ok)throw new Error(result.error||'Unable to launch demo');
-   sessionStorage.setItem('casaflow-demo-session','1');
+   if(result.demo_mode!==true)throw new Error('Demo mode could not be verified. Please relaunch from CasaFlow.');
    const {error:sessionError}=await db.auth.setSession({access_token:result.access_token,refresh_token:result.refresh_token});
    if(sessionError)throw sessionError;
+   // This marker is created only after the server validates the signed demo ticket,
+   // dedicated role credentials and isolated demo-hotel membership.
+   sessionStorage.setItem('casaflow-demo-session','1');
    const destination=roles.find(r=>r.id===role)?.path||'/owner';
    location.replace(destination);
   }catch(e:any){
    sessionStorage.removeItem('casaflow-demo-session');
+   sessionStorage.removeItem('casaflow-parallel-active');
+   sessionStorage.removeItem('casaflow-parallel-tab-id');
    setError(e?.message||'Unable to launch demo. Please retry.');
   }finally{setBusy(false)}
  };
