@@ -10,7 +10,7 @@ const StaffWorkload=React.lazy(()=>import('./WorkflowWidgets').then(m=>({default
 const GuestIncidentDesk=React.lazy(()=>import('./WorkflowWidgets').then(m=>({default:m.GuestIncidentDesk})));
 const SyncFeedback=React.lazy(()=>import('./WorkflowWidgets').then(m=>({default:m.SyncFeedback})));
 const AtelierPreview=React.lazy(()=>import('./AtelierPreview'));
-import{db,configured,parallelMode,hotelStorage,queryData,rpc,isStale,roomLabel,roleLabel,type Role,type Room,type RoomStatus,type Task,type TaskKind,type Member,type Data}from'./db';
+import{db,configured,parallelMode,demoMode,hotelStorage,queryData,rpc,isStale,roomLabel,roleLabel,type Role,type Room,type RoomStatus,type Task,type TaskKind,type Member,type Data}from'./db';
 import'./styles.css';
 import'./atelier.css';
 import'./atelier_exact.css';
@@ -53,12 +53,12 @@ function App(){
   if(!db||signingOut)return;
   setSigningOut(true);
   try{
-   if(hotel&&!parallelMode){try{await rpc('end_work_shift',{p_hotel:hotel})}catch{/* The scheduled expiry worker will finalize an offline sign-out. */}}
-   const {error}=await db.auth.signOut(parallelMode?{scope:'local'}:undefined);
+   if(hotel&&!parallelMode&&!demoMode){try{await rpc('end_work_shift',{p_hotel:hotel})}catch{/* The scheduled expiry worker will finalize an offline sign-out. */}}
+   const {error}=await db.auth.signOut(parallelMode||demoMode?{scope:'local'}:undefined);
    if(error)throw error;
    setSession(null);setHotel(null);hotelRef.current=null;setMenu(false);setMoreOpen(false);
    hotelStorage.removeItem('casaflow-hotel');
-   if(parallelMode){window.sessionStorage.removeItem('casaflow-parallel-active');window.sessionStorage.removeItem('casaflow-demo-session');}
+   if(parallelMode||demoMode){window.sessionStorage.removeItem('casaflow-parallel-active');window.sessionStorage.removeItem('casaflow-parallel-tab-id');window.sessionStorage.removeItem('casaflow-demo-session');}
    window.location.replace('/');
   }catch(err:any){notify(err?.message||'Unable to sign out. Try again.')}
   finally{setSigningOut(false)}
@@ -112,7 +112,7 @@ function App(){
     if(valid!==selectedHotel){hotelRef.current=valid;setHotel(valid);hotelStorage.setItem('casaflow-hotel',valid!)}
     const next=await queryData(valid!,{memberships,includeChats:false});
     const shift=next.staffDispatch.find(d=>d.user_id===session.user.id&&d.hotel_id===valid);
-    if(!parallelMode&&shift?.shift_started_at&&(!shift.on_shift||!shift.shift_ends_at||Date.parse(shift.shift_ends_at)<=Date.now())){
+    if(!parallelMode&&!demoMode&&shift?.shift_started_at&&(!shift.on_shift||!shift.shift_ends_at||Date.parse(shift.shift_ends_at)<=Date.now())){
      await db.auth.signOut();
      setSession(null);setHotel(null);hotelRef.current=null;hotelStorage.removeItem('casaflow-hotel');
      notify('Your shift has ended. Sign in to begin your next shift.');
@@ -121,7 +121,7 @@ function App(){
     // Paint the workspace before starting a new shift. The RPC is still
     // required, but it no longer delays the first populated dashboard render.
     setData(next);setLastSync(Date.now());setLastError('');setSync('live');
-    if(!parallelMode&&!shift?.shift_started_at){
+    if(!parallelMode&&!demoMode&&!shift?.shift_started_at){
      void rpc('begin_work_shift',{p_hotel:valid!}).catch(err=>{
       const message=err?.message||'Could not start your work shift';
       setLastError(message);notify(message);
@@ -169,13 +169,13 @@ function App(){
  const currentShift=data.staffDispatch.find(d=>d.user_id===session?.user?.id&&d.hotel_id===hotel);
  const shiftEnd=currentShift?.shift_ends_at||null;
  useEffect(()=>{
-  if(!db||!session?.user||!hotel||!shiftEnd||parallelMode)return;
+  if(!db||!session?.user||!hotel||!shiftEnd||parallelMode||demoMode)return;
   let expired=false;
   const check=async()=>{
    if(expired||window.sessionStorage.getItem('casaflow-signin-pending')||Date.parse(shiftEnd)>Date.now())return;
    expired=true;
    try{await rpc('end_work_shift',{p_hotel:hotel})}catch{/* cron will handle reallocation if offline */}
-   await db?.auth.signOut(parallelMode?{scope:'local'}:undefined).catch(()=>null);
+   await db?.auth.signOut(parallelMode||demoMode?{scope:'local'}:undefined).catch(()=>null);
    setSession(null);setHotel(null);hotelRef.current=null;hotelStorage.removeItem('casaflow-hotel');notify('Shift finished. You have been signed out automatically.');
   };
   const id=window.setInterval(()=>void check(),1000);
@@ -244,7 +244,7 @@ function App(){
  {view==='overview'&&role==='frontdesk'&&<div className="wf-view-banner"><strong>RECEPTION CONSOLE</strong> — Guest intake, room status and reception dispatch. Specialist repairs belong to management.</div>}
  {view==='overview'&&role==='manager'&&<div className="wf-view-banner"><strong>MANAGER OPERATIONS</strong> — Staff dispatch, escalations and team oversight.</div>}
  {view==='overview'&&role==='supervisor'&&<div className="wf-view-banner"><strong>HOUSEKEEPING SUPERVISOR</strong> — Cleaning approvals and inspections only.</div>}
- {view==='overview'&&<section className="card shift-card" aria-live="polite"><div><b>{lang==='en'?'My automatic work shift':'Mi turno automático'}</b><small>{shiftEnd?'Working since login · '+new Date(currentShift?.shift_started_at||'').toLocaleTimeString()+' · Shift ends '+new Date(shiftEnd).toLocaleTimeString():'Shift starts on sign-in and ends automatically.'}</small></div><ShiftCountdown until={shiftEnd}/></section>}
+ {view==='overview'&&<section className="card shift-card" aria-live="polite"><div><b>{demoMode?(lang==='en'?'Demo workspace':'Espacio de demostración'):(lang==='en'?'My automatic work shift':'Mi turno automático')}</b><small>{demoMode?(lang==='en'?'Demo mode is on · No shift expiry':'Modo demo activo · El turno no caduca'):shiftEnd?'Working since login · '+new Date(currentShift?.shift_started_at||'').toLocaleTimeString()+' · Shift ends '+new Date(shiftEnd).toLocaleTimeString():'Shift starts on sign-in and ends automatically.'}</small></div>{demoMode?<Pill tone="tone-ready">DEMO · ALWAYS ON</Pill>:<ShiftCountdown until={shiftEnd}/>}</section>}
  {view==='overview'&&(['housekeeping','maintenance'].includes(role)?<>
   <div className="stats"><Stat icon={<ClipboardCheck/>} label={lang==='en'?'My assigned jobs':'Mis tareas asignadas'} value={data.tasks.filter(k=>k.assigned_to===session.user.id).length} detail={t.work}/><Stat icon={<Clock/>} label={t.open} value={data.tasks.filter(k=>k.status==='open').length} detail={t.pending}/><Stat icon={<Wrench/>} label={t.doing} value={data.tasks.filter(k=>k.status==='doing').length} detail={t.live}/><Stat icon={<CheckCircle2/>} label={t.done} value={data.tasks.filter(k=>k.status==='done').length} detail={t.roomBoard}/></div>
   <section className="card"><div className="cardhead"><div><small>{roleLabel[role]}</small><h2>{lang==='en'?'My work queue':'Mis tareas pendientes'}</h2></div><Pill>{pending.length}</Pill></div>{taskCards(pending.filter(k=>k.assigned_to===session.user.id||k.created_by===session.user.id))}</section>
