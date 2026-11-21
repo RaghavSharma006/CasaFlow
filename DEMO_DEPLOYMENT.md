@@ -11,6 +11,7 @@ Add these directly in Vercel Project Settings → Environment Variables, for Pre
 - `SUPABASE_SECRET_KEY`: the Supabase server-only secret key (`sb_secret_...`) for project `casaflow-hotel-ops`. Never use a `VITE_` prefix.
 - `DEMO_SESSION_PEPPER`: at least 32 random bytes, base64url or hex.
 - `CRON_SECRET`: at least 32 random bytes, used to authorize the cleanup endpoint. Add the exact same value to GitHub Actions as `CASAFLOW_DEMO_CRON_SECRET`.
+- Optional Turnstile pair: `VITE_DEMO_TURNSTILE_SITE_KEY` (public site key) and `DEMO_TURNSTILE_SECRET_KEY` (server-only secret). Configure both or leave both unset; add `hotel-ops-pilot.vercel.app` as an allowed hostname in Cloudflare.
 
 Existing browser variables remain:
 - `VITE_SUPABASE_URL`
@@ -43,7 +44,7 @@ Do not run `supabase/schema.sql`; it is an initial schema for a new isolated dat
 - Demo workspace authorization expires at 45 minutes even if the browser remains open.
 - The dashboard polls session status and signs out the current tab locally when the parent demo session ends.
 - Closing a tab clears its tab-scoped Supabase session storage. Browser close events are not a security boundary.
-- The Vercel cron is daily because the linked Vercel team is currently on Hobby. This only delays physical deletion of expired synthetic users and hotel rows; access is already denied at the 45-minute database expiry. Upgrade the Vercel plan or use an external scheduler for more frequent cleanup.
+- A GitHub Actions schedule calls cleanup every 15 minutes. The same random value must be set as Vercel `CRON_SECRET` and GitHub Actions secret `CASAFLOW_DEMO_CRON_SECRET`. Database authorization denies access at the 45-minute mark even if a cleanup run is delayed.
 
 ## Deployment gates
 
