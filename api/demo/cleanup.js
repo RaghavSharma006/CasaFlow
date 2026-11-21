@@ -3,7 +3,7 @@ import { adminClient, constantTimeEqual, json } from '../../server/demo-shared.j
 export default async function handler(req,res) {
   if(req.method!=='GET') return json(res,405,{error:'Method not allowed.'});
   const expected=process.env.CRON_SECRET||'';
-  const supplied=String(req.headers.authorization||'').replace(/^Bearer\\s+/i,'');
+  const supplied=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'');
   if(!expected||!constantTimeEqual(expected,supplied)) return json(res,401,{error:'Unauthorized.'});
   try {
     const admin=adminClient();
