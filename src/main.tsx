@@ -155,7 +155,7 @@ function App(){
   .on('postgres_changes',{event:'*',schema:'public',table:'ops_alerts',filter:'hotel_id=eq.'+hotel},()=>schedule())
   .on('postgres_changes',{event:'*',schema:'public',table:'staff_dispatch',filter:'hotel_id=eq.'+hotel},()=>schedule())
   .on('postgres_changes',{event:'*',schema:'public',table:'memberships',filter:'hotel_id=eq.'+hotel},()=>schedule())
-  .subscribe(s=>{if(s==='SUBSCRIBED'){setSync('live');refreshRef.current()}if(s==='CHANNEL_ERROR'||s==='TIMED_OUT')setSync('offline')});
+  .subscribe(s=>{if(s==='SUBSCRIBED'){setSync('live')}if(s==='CHANNEL_ERROR'||s==='TIMED_OUT')setSync('offline')});
   function schedule(){if(timer.current)clearTimeout(timer.current);timer.current=setTimeout(()=>refreshRef.current(),450)}
   function scheduleChat(){if(chatTimer.current)clearTimeout(chatTimer.current);chatTimer.current=setTimeout(()=>refreshChatRef.current(),180)}
   const onFocus=()=>refreshRef.current();const onOnline=()=>refreshRef.current();window.addEventListener('focus',onFocus);window.addEventListener('online',onOnline);
