@@ -25,6 +25,8 @@ export const parallelMode=typeof window!=='undefined'&&(
  (new URLSearchParams(window.location.search).get('parallel')==='1'||window.location.pathname==='/demo-launch')||
  window.sessionStorage.getItem(PARALLEL_FLAG)==='1'
 );
+// Only a ticket-validated CasaFlow demo launch sets this per-tab flag.
+export const demoMode=typeof window!=='undefined'&&window.sessionStorage.getItem('casaflow-demo-session')==='1';
 let parallelAuthKey: string | undefined;
 if(parallelMode){
  window.sessionStorage.setItem(PARALLEL_FLAG,'1');
