@@ -10,7 +10,7 @@ Add these directly in Vercel Project Settings → Environment Variables, for Pre
 
 - `SUPABASE_SECRET_KEY`: the Supabase server-only secret key (`sb_secret_...`) for project `casaflow-hotel-ops`. Never use a `VITE_` prefix.
 - `DEMO_SESSION_PEPPER`: at least 32 random bytes, base64url or hex.
-- `CRON_SECRET`: at least 32 random bytes, used to authorize the cleanup endpoint.
+- `CRON_SECRET`: at least 32 random bytes, used to authorize the cleanup endpoint. Add the exact same value to GitHub Actions as `CASAFLOW_DEMO_CRON_SECRET`.
 
 Existing browser variables remain:
 - `VITE_SUPABASE_URL`
@@ -49,9 +49,10 @@ Do not run `supabase/schema.sql`; it is an initial schema for a new isolated dat
 
 1. Connect GitHub repository `RaghavSharma006/CasaFlow` to the existing Vercel project `hotel-ops-pilot`; the project currently reports no Git repo link.
 2. Configure the three server-only environment variables.
-3. Apply the reviewed migration to the existing Supabase project.
-4. Deploy this branch as a Vercel Preview first.
-5. Test all eight roles in separate tabs, logout isolation, expiry, QR request routing, tracking, feedback, and cross-visitor isolation.
-6. Only merge to the configured production branch after the Preview checks pass.
+3. Add the same random cleanup secret as Vercel's `CRON_SECRET` to GitHub repository Actions secrets as `CASAFLOW_DEMO_CRON_SECRET` (the workflow calls the cleanup API every 15 minutes; it runs after this workflow reaches the default branch).
+4. Apply the reviewed migration to the existing Supabase project.
+5. Deploy this branch as a Vercel Preview first.
+6. Test all eight roles in separate tabs, logout isolation, expiry, QR request routing, tracking, feedback, and cross-visitor isolation.
+7. Only merge to the configured production branch after the Preview checks pass.
 
 No credentials are included in this repository.
