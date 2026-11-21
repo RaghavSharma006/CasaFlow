@@ -15,8 +15,8 @@ test('hotel selection does not recreate load or queue a duplicate startup fetch'
 test('initial workspace load reuses membership and starts shift after painting data',()=>{
  assert.match(main,/queryData\(valid!,\{memberships,includeChats:false\}\)/);
  assert.match(main,/next\.staffDispatch\.find/);
- assert.match(main,/setData\(next\);setLastSync\(Date\.now\(\)\);setLastError\(''\);setSync\('live'\)/);
- assert.match(main,/void rpc\('begin_work_shift',\{p_hotel:valid!\}\)/);
+ assert.match(main,/setData\(next\);setLastSync\(Date\.now\(\)\);setSync\('live'\)/);
+ assert.match(main,/await rpc\('begin_work_shift',\{p_hotel:valid!\}\)/);
 });
 test('chat history is not fetched during login and loads when its screen is opened',()=>{
  const db=readFileSync(new URL('../src/db.ts',import.meta.url),'utf8');
@@ -43,8 +43,8 @@ test('setup is shown only after membership lookup confirms no active membership'
  assert.doesNotMatch(main,/if\(!hotel\|\|!myMember\)return <Onboard/);
 });
 test('a freshly authenticated worker can restart an expired shift and immediately reload rebalanced tasks',()=>{
- assert.match(main,/const shiftExpired=!parallelMode&&!demoMode/);
- assert.match(main,/if\(shiftExpired\)\{[\s\S]*?await rpc\('begin_work_shift',\{p_hotel:valid!\}\);[\s\S]*?next=await queryData\(valid!,\{memberships,includeChats:false\}\)/);
+ assert.match(main,/const shiftInactive=!parallelMode&&!demoMode&&isShiftWorker/);
+ assert.match(main,/if\(shiftInactive\)\{[\s\S]*?await rpc\('begin_work_shift',\{p_hotel:valid!\}\);[\s\S]*?next=await queryData\(valid!,\{memberships,includeChats:false\}\)/);
 });
 test('workspace query errors cannot route an existing member into onboarding',()=>{
  assert.match(main,/setMembershipState\(current=>current==='ready'\?'ready':'error'\)/);
@@ -72,7 +72,7 @@ test('demo mode is enabled only by the secure per-tab demo launcher marker',()=>
 });
 test('demo sessions never start or expire a staff shift',()=>{
  assert.match(main,/const shiftExpired=!parallelMode&&!demoMode/);
- assert.match(main,/!parallelMode&&!demoMode&&!shift\?\.shift_started_at/);
+ assert.match(main,/!parallelMode&&!demoMode&&isShiftWorker/);
  assert.match(main,/!hotel\|\|!shiftEnd\|\|parallelMode\|\|demoMode\)return/);
  assert.match(main,/demoMode\?\(lang==='en'\?'Demo workspace'/);
  assert.match(main,/DEMO · ALWAYS ON/);
