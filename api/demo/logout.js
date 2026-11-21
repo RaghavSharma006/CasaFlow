@@ -1,4 +1,4 @@
-import { activeSession, adminClient, assertSameOrigin, clearCookieHeader, json, readCookie } from './_shared.js';
+import { activeSession, adminClient, assertSameOrigin, clearCookieHeader, json, readCookie } from '../../server/demo-shared.js';
 
 export default async function handler(req,res) {
   if(req.method!=='POST') return json(res,405,{error:'Method not allowed.'});
