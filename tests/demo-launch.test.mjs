@@ -38,7 +38,7 @@ test('demo path receives a unique per-tab Supabase storage key',()=>{
  assert.match(db,/window\.location\.pathname==='\/demo-launch'/);
  assert.match(db,/casaflow-parallel-\$\{tabId\}-auth-token/);
 });
-test('parallel/demo tabs use local logout and never end the shared work shift',()=>{
+test('parallel/demo tabs use local logout; demo sessions preserve the always-on shift',()=>{
  assert.match(main,/db\.auth\.signOut\(parallelMode\|\|demoMode\?\{scope:'local'\}:undefined\)/);
  assert.match(main,/if\(hotel&&!parallelMode&&!demoMode\)/);
  assert.match(main,/!shiftEnd\|\|parallelMode\|\|demoMode/);
