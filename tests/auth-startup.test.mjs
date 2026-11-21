@@ -42,6 +42,10 @@ test('setup is shown only after membership lookup confirms no active membership'
  assert.match(main,/setMembershipState\('ready'\);[\s\S]*?setData\(d=>\(\{\.\.\.d,memberships\}\)\)/);
  assert.doesNotMatch(main,/if\(!hotel\|\|!myMember\)return <Onboard/);
 });
+test('a freshly authenticated worker can restart an expired shift and immediately reload rebalanced tasks',()=>{
+ assert.match(main,/const shiftExpired=!parallelMode&&!demoMode/);
+ assert.match(main,/if\(shiftExpired\)\{[\s\S]*?await rpc\('begin_work_shift',\{p_hotel:valid!\}\);[\s\S]*?next=await queryData\(valid!,\{memberships,includeChats:false\}\)/);
+});
 test('workspace query errors cannot route an existing member into onboarding',()=>{
  assert.match(main,/setMembershipState\(current=>current==='ready'\?'ready':'error'\)/);
 });
