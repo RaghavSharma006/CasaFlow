@@ -54,7 +54,8 @@ function App(){
    if(error)throw error;
    setSession(null);setHotel(null);setMenu(false);setMoreOpen(false);
    hotelStorage.removeItem('casaflow-hotel');
-   window.history.replaceState(null,'','/');
+   if(parallelMode){window.sessionStorage.removeItem('casaflow-parallel-active');window.sessionStorage.removeItem('casaflow-demo-session');}
+   window.location.replace('/');
   }catch(err:any){notify(err?.message||'Unable to sign out. Try again.')}
   finally{setSigningOut(false)}
  };
