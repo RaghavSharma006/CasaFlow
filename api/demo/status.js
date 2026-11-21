@@ -1,4 +1,4 @@
-import { activeSession, adminClient, DEMO_ROLES, json, readCookie } from './_shared.js';
+import { activeSession, adminClient, DEMO_ROLES, json, readCookie } from '../../server/demo-shared.js';
 
 export default async function handler(req,res) {
   if(req.method!=='GET') return json(res,405,{error:'Method not allowed.'});
