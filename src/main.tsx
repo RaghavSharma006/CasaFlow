@@ -36,6 +36,7 @@ function App(){
  const [session,setSession]=useState<any>(null),[checking,setChecking]=useState(true);
  const [membershipState,setMembershipState]=useState<'checking'|'ready'|'none'|'error'>('checking');
  const[hotel,setHotel]=useState<string|null>(hotelStorage.getItem('casaflow-hotel'));
+ const hotelRef=useRef<string|null>(hotel);hotelRef.current=hotel;
  const[data,setData]=useState<Data>({hotels:[],memberships:[],rooms:[],tasks:[],activity:[],messages:[],privateMessages:[],staffDispatch:[],guestMeta:[],alerts:[]});
  const[view,setView]=useState<View>('overview'),[roomId,setRoomId]=useState<string|null>(null);
  const[search,setSearch]=useState(''),[statusFilter,setStatusFilter]=useState('all'),[modal,setModal]=useState<'task'|'room'|'invite'|'qr'|'dispatch'|null>(null);
@@ -91,30 +92,38 @@ function App(){
   const request=(async()=>{try{
     const{data:memberRows,error}=await db.from('memberships').select('hotel_id,user_id,display_name,role,active').eq('user_id',session.user.id).eq('active',true);
     if(error)throw error;
-    const memberships=memberRows||[];
+    const memberships=(memberRows||[]) as Member[];
     if(!memberships.length){
      setMembershipState('none');
      setHotel(null);
-     setData(d=>({...d,memberships:[]}));
+     hotelStorage.removeItem('casaflow-hotel');
+     setData({hotels:[],memberships:[],rooms:[],tasks:[],activity:[],messages:[],privateMessages:[],staffDispatch:[],guestMeta:[],alerts:[]});
      setSync('live');
      return;
     }
-    // Resolve membership independently of the larger workspace query. A data
-    // loading failure must never be mistaken for a first-time/no-hotel account.
+    // Resolve identity first so dashboard navigation does not wait for every
+    // table. Reuse this verified membership result in the workspace query.
     setMembershipState('ready');
-    setData(d=>({...d,memberships:memberships as Member[]}));
-    const valid=memberships.some(m=>m.hotel_id===hotel)?hotel:memberships[0].hotel_id;
-    if(valid!==hotel){setHotel(valid);hotelStorage.setItem('casaflow-hotel',valid!)}
-    if(!parallelMode){
-     const shift=await db.from('staff_dispatch').select('shift_started_at,shift_ends_at,on_shift').eq('hotel_id',valid!).eq('user_id',session.user.id).maybeSingle();
-     if(shift.error)throw shift.error;
-     if(shift.data?.shift_started_at&&(!shift.data.on_shift||!shift.data.shift_ends_at||Date.parse(shift.data.shift_ends_at)<=Date.now())){
-       await db.auth.signOut();setSession(null);setHotel(null);hotelStorage.removeItem('casaflow-hotel');notify('Your shift has ended. Sign in to begin your next shift.');return;
-     }
-     const [next]=await Promise.all([queryData(valid!),!shift.data?.shift_started_at?rpc('begin_work_shift',{p_hotel:valid!}):Promise.resolve(null)]);
-     setData(next);setLastSync(Date.now());setLastError('');setSync('live');
-    }else{
-     const next=await queryData(valid!);setData(next);setLastSync(Date.now());setLastError('');setSync('live');
+    setData(d=>({...d,memberships}));
+    const selectedHotel=hotelRef.current;
+    const valid=memberships.some(m=>m.hotel_id===selectedHotel)?selectedHotel:memberships[0].hotel_id;
+    if(valid!==selectedHotel){hotelRef.current=valid;setHotel(valid);hotelStorage.setItem('casaflow-hotel',valid!)}
+    const next=await queryData(valid!,{memberships,includeChats:false});
+    const shift=next.staffDispatch.find(d=>d.user_id===session.user.id&&d.hotel_id===valid);
+    if(!parallelMode&&shift?.shift_started_at&&(!shift.on_shift||!shift.shift_ends_at||Date.parse(shift.shift_ends_at)<=Date.now())){
+     await db.auth.signOut();
+     setSession(null);setHotel(null);hotelRef.current=null;hotelStorage.removeItem('casaflow-hotel');
+     notify('Your shift has ended. Sign in to begin your next shift.');
+     return;
+    }
+    // Paint the workspace before starting a new shift. The RPC is still
+    // required, but it no longer delays the first populated dashboard render.
+    setData(next);setLastSync(Date.now());setLastError('');setSync('live');
+    if(!parallelMode&&!shift?.shift_started_at){
+     void rpc('begin_work_shift',{p_hotel:valid!}).catch(err=>{
+      const message=err?.message||'Could not start your work shift';
+      setLastError(message);notify(message);
+     });
     }
   }catch(err:any){setMembershipState(current=>current==='ready'?'ready':'error');setSync('offline');setLastError(err.message||String(err));notify(err.message||String(err))}})();
   inFlight.current=request;
@@ -122,7 +131,7 @@ function App(){
     inFlight.current=null;
     if(queued.current){queued.current=false;setTimeout(()=>refreshRef.current(),350)}
   }
- },[session?.user?.id,hotel]);
+ },[session?.user?.id]);
  useEffect(()=>{refreshRef.current=()=>{void load()}},[load]);useEffect(()=>{void load()},[load]);
  useEffect(()=>{const onShift=()=>void load();window.addEventListener('casaflow-shift-started',onShift);return()=>window.removeEventListener('casaflow-shift-started',onShift)},[load]);
  const refreshChats=useCallback(async()=>{
@@ -153,6 +162,7 @@ function App(){
   const poll=setInterval(()=>{if(document.visibilityState==='visible')refreshRef.current()},15000);
   return()=>{if(timer.current)clearTimeout(timer.current);if(chatTimer.current)clearTimeout(chatTimer.current);clearInterval(poll);window.removeEventListener('focus',onFocus);window.removeEventListener('online',onOnline);void db?.removeChannel(channel)};
  },[hotel,session?.user?.id]);
+ useEffect(()=>{if(view==='messages')void refreshChats()},[view,refreshChats,lastSync]);
  const action=async(fn:()=>Promise<unknown>)=>{if(busy)return;setBusy(true);try{const result=await fn();await load();setLastError('');if(result&&typeof result==='object'&&'added' in result){const r=result as {added:number,skipped:number};notify(lang==='en'?`Created ${r.added} rooms (${r.skipped} already existed).`:`Se crearon ${r.added} habitaciones (${r.skipped} ya existían).`)}else notify(lang==='en'?'Saved and synchronized':'Guardado y sincronizado')}catch(e:any){setLastError(e.message||t.error);notify(isStale(e.message)?(lang==='en'?'Another user changed this first. Refresh and retry.':'Otro usuario cambió esto. Actualiza.'):(e.message||t.error));await load()}finally{setBusy(false)}};
  const currentShift=data.staffDispatch.find(d=>d.user_id===session?.user?.id&&d.hotel_id===hotel);
  const shiftEnd=currentShift?.shift_ends_at||null;
@@ -379,6 +389,7 @@ function Auth({lang,setLang,theme,setTheme,notify,onAuthenticated}:{lang:'en'|'e
    }
   }finally{setWorking(false)}
  };
+ if(working&&!resetMode&&!signUp)return <div className="authpage"><div className="authcard"><div className="logo large"><Building2/></div><h1>CasaFlow</h1><Loader2 className="spin" size={28}/><p role="status" aria-live="polite">{lang==='en'?'Verifying your sign-in securely…':'Verificando su acceso de forma segura…'}</p></div></div>;
  return <div className="authpage"><div className="authcard">
   <div className="authheader"><div className="logo large"><Building2/></div>
    <button type="button" className="headerbtn" onClick={()=>setLang(lang==='en'?'es':'en')}>{lang==='en'?'ES':'EN'}</button>
