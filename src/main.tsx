@@ -53,7 +53,7 @@ function App(){
   if(!db||signingOut)return;
   setSigningOut(true);
   try{
-   if(hotel&&!parallelMode){try{await rpc('end_work_shift',{p_hotel:hotel})}catch{/* The scheduled expiry worker will finalize an offline sign-out. */}}
+   if(hotel&&!parallelMode&&!demoMode){try{await rpc('end_work_shift',{p_hotel:hotel})}catch{/* The scheduled expiry worker will finalize an offline sign-out. */}}
    const {error}=await db.auth.signOut(parallelMode||demoMode?{scope:'local'}:undefined);
    if(error)throw error;
    setSession(null);setHotel(null);hotelRef.current=null;setMenu(false);setMoreOpen(false);
@@ -114,7 +114,7 @@ function App(){
     let shift=next.staffDispatch.find(d=>d.user_id===session.user.id&&d.hotel_id===valid);
     const workerRole=memberships.find(m=>m.user_id===session.user.id)?.role;
     const isShiftWorker=workerRole==='housekeeping'||workerRole==='maintenance'||workerRole==='frontdesk'||workerRole==='supervisor';
-    const shiftInactive=!parallelMode&&isShiftWorker&&(!shift?.on_shift||!shift.shift_ends_at||Date.parse(shift.shift_ends_at)<=Date.now());
+    const shiftInactive=!parallelMode&&isShiftWorker&&(!shift?.on_shift||!shift.shift_ends_at||(!demoMode&&Date.parse(shift.shift_ends_at)<=Date.now()));
     // Start or renew the worker shift before showing the queue. The database
     // performs dispatch in the same transaction; reload so the UI sees owners.
     if(shiftInactive){
@@ -171,7 +171,7 @@ function App(){
  const currentShift=data.staffDispatch.find(d=>d.user_id===session?.user?.id&&d.hotel_id===hotel);
  const shiftEnd=currentShift?.shift_ends_at||null;
  useEffect(()=>{
-  if(!db||!session?.user||!hotel||!shiftEnd||parallelMode)return;
+  if(!db||!session?.user||!hotel||!shiftEnd||parallelMode||demoMode)return;
   let expired=false;
   const check=async()=>{
    if(expired||window.sessionStorage.getItem('casaflow-signin-pending')||Date.parse(shiftEnd)>Date.now())return;
@@ -226,7 +226,7 @@ function App(){
  };
  const mutate=(name:string,params:Record<string,unknown>)=>action(()=>rpc(name,params));
  const manualRefresh=async()=>{if(refreshing)return;setRefreshing(true);setSync('connecting');setLastError('');try{await load()}finally{setRefreshing(false)}};
- const shiftActive=Boolean(currentShift?.on_shift&&currentShift.shift_ends_at&&Date.parse(currentShift.shift_ends_at)>Date.now());
+ const shiftActive=demoMode||Boolean(currentShift?.on_shift&&currentShift.shift_ends_at&&Date.parse(currentShift.shift_ends_at)>Date.now());
  const startShift=async()=>{if(busy||!hotel)return;setBusy(true);setLastError('');try{await rpc('begin_work_shift',{p_hotel:hotel});await load();notify(lang==='en'?'Your shift is active. Jobs are being assigned.':'Turno activo. Asignando tareas.')}catch(e:any){setLastError(e.message||'Could not start your shift');notify(e.message||'Could not start your shift')}finally{setBusy(false)}};
  const claimTask=async(task:Task)=>{setWorkingId(task.id);try{await rpc('claim_department_task',{p_hotel:hotel,p_task:task.id,p_expected_version:task.version});await load();notify(lang==='en'?'Task added to your work queue':'Tarea añadida a tu cola')}catch(e:any){notify(e.message||t.error);await load()}finally{setWorkingId(null)}};
  const advance=async(task:Task)=>{setWorkingId(task.id);try{await mutate(task.kind==='guest'?(task.status==='open'?'accept_guest_request':'complete_guest_request'):'advance_task',{p_hotel:hotel,p_task:task.id,p_expected_version:task.version,...(task.kind==='guest'?{}:{p_assignee:null})})}finally{setWorkingId(null)}};
