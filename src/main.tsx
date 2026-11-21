@@ -8,6 +8,8 @@ import CasaRoomBoard from './CasaRoomBoard';
 import{StaffWorkload,GuestIncidentDesk,SyncFeedback}from './WorkflowWidgets';
 import AtelierPreview from './AtelierPreview';
 import{db,configured,parallelMode,hotelStorage,queryData,rpc,isStale,roomLabel,roleLabel,type Role,type Room,type RoomStatus,type Task,type TaskKind,type Member,type Data}from'./db';
+import{DemoLauncher,DemoRoleBootstrap}from'./DemoAccess';
+import GuestTracking from './GuestTracking';
 import'./styles.css';
 import'./atelier.css';
 import'./atelier_exact.css';
@@ -48,16 +50,18 @@ function App(){
   if(!db||signingOut)return;
   setSigningOut(true);
   try{
+   const isDemoSession=session?.user?.app_metadata?.casaflow_demo===true;
    if(hotel){try{await rpc('end_work_shift',{p_hotel:hotel})}catch{/* The scheduled expiry worker will finalize an offline sign-out. */}}
-   const {error}=await db.auth.signOut();
+   const {error}=await db.auth.signOut({scope:(parallelMode||isDemoSession)?'local':'global'});
    if(error)throw error;
    setSession(null);setHotel(null);setMenu(false);setMoreOpen(false);
    hotelStorage.removeItem('casaflow-hotel');
-   window.history.replaceState(null,'','/');
+   if(isDemoSession)window.location.replace('/demo-launch');else window.history.replaceState(null,'','/');
   }catch(err:any){notify(err?.message||'Unable to sign out. Try again.')}
   finally{setSigningOut(false)}
  };
  useEffect(()=>{if(!db){setChecking(false);return}db.auth.getSession().then(({data,error})=>{if(error)notify(error.message);setSession(data.session);}).catch(()=>notify('Unable to restore login. Check your connection and refresh.')).finally(()=>setChecking(false));const{subscription}=db.auth.onAuthStateChange((_evt,s)=>{setSession(s);if(!s){setHotel(null);hotelStorage.removeItem('casaflow-hotel')}}).data;return()=>subscription.unsubscribe()},[]);
+ useEffect(()=>{if(!db||session?.user?.app_metadata?.casaflow_demo!==true)return;let stopped=false;const check=async()=>{try{const response=await fetch('/api/demo/status',{cache:'no-store',credentials:'same-origin'});if(!response.ok)return;const result=await response.json();if(!result.active&&!stopped){stopped=true;await db.auth.signOut({scope:'local'}).catch(()=>null);setSession(null);setHotel(null);hotelStorage.removeItem('casaflow-hotel');window.location.replace('/demo-launch?expired=1')}}catch{/* Transient status failures do not end an otherwise valid session. */}};const timer=window.setInterval(()=>void check(),15000);const onVisible=()=>{if(document.visibilityState==='visible')void check()};document.addEventListener('visibilitychange',onVisible);void check();return()=>{stopped=true;window.clearInterval(timer);document.removeEventListener('visibilitychange',onVisible)}},[session?.user?.id]);
  const load=useCallback(async()=>{
   if(!db||!session?.user)return;
   if(inFlight.current){queued.current=true;await inFlight.current;return;}
@@ -73,7 +77,7 @@ function App(){
      if(shift.error)throw shift.error;
      if(!shift.data?.shift_started_at){await rpc('begin_work_shift',{p_hotel:valid!})}
      else if(!shift.data.on_shift||!shift.data.shift_ends_at||Date.parse(shift.data.shift_ends_at)<=Date.now()){
-       await db.auth.signOut();setSession(null);setHotel(null);hotelStorage.removeItem('casaflow-hotel');notify('Your shift has ended. Sign in to begin your next shift.');return;
+       await db.auth.signOut({scope:parallelMode||session.user?.app_metadata?.casaflow_demo===true?'local':'global'});setSession(null);setHotel(null);hotelStorage.removeItem('casaflow-hotel');notify('Your shift has ended. Sign in to begin your next shift.');return;
      }
     }
     const next=await queryData(valid!);setData(next);setLastSync(Date.now());setLastError('');setSync('live');
@@ -124,7 +128,7 @@ function App(){
    if(expired||window.sessionStorage.getItem('casaflow-signin-pending')||Date.parse(shiftEnd)>Date.now())return;
    expired=true;
    try{await rpc('end_work_shift',{p_hotel:hotel})}catch{/* cron will handle reallocation if offline */}
-   await db?.auth.signOut().catch(()=>null);
+   await db?.auth.signOut({scope:parallelMode||session.user?.app_metadata?.casaflow_demo===true?'local':'global'}).catch(()=>null);
    setSession(null);setHotel(null);hotelStorage.removeItem('casaflow-hotel');notify('Shift finished. You have been signed out automatically.');
   };
   const id=window.setInterval(()=>void check(),1000);
@@ -179,7 +183,9 @@ function App(){
  const navItems:{id:View,icon:React.ElementType}[]=[{id:'overview',icon:LayoutDashboard},{id:'rooms',icon:Columns3},{id:'cleaning',icon:Brush},{id:'maintenance',icon:Wrench},{id:'requests',icon:HandPlatter},{id:'team',icon:Users},{id:'messages',icon:MessageSquare},{id:'activity',icon:Activity},{id:'settings',icon:Settings}];
  if(location.pathname==='/design')return <AtelierPreview lang={lang} setLang={setLang} theme={theme} setTheme={setTheme}/>;
  if(location.pathname==='/dev')return <DevSandbox lang={lang} theme={theme} setLang={setLang} setTheme={setTheme}/>;
- if(location.pathname==='/guest')return <Guest lang={lang} setLang={setLang} theme={theme} setTheme={setTheme}/>;
+ if(location.pathname==='/demo-launch')return <DemoLauncher/>;
+ if(location.pathname==='/demo-role')return <DemoRoleBootstrap/>;
+ if(location.pathname==='/guest'||location.pathname==='/guest/track')return <GuestTracking lang={lang} setLang={setLang} theme={theme} setTheme={setTheme}/>;
  if(!configured)return <div className="authpage"><div className="authcard"><div className="logo large"><Building2/></div><h1>CasaFlow</h1><p>{t.demoDisabled}</p><div className="notice">{t.demoExplain}</div><p className="tiny">See README.md for the isolated Supabase project setup. Existing live demo remains unchanged.</p></div></div>;
  if(checking)return <div className="authpage"><Loader2 className="spin" size={30}/></div>;
  if(!session)return <Auth lang={lang} setLang={setLang} theme={theme} setTheme={setTheme} notify={notify}/>;
