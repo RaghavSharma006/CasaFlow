@@ -41,9 +41,12 @@ export default async function handler(req,res) {
       for(const spec of userSpecs(sessionId)) {
         const {data,error}=await admin.auth.admin.createUser({
           email:spec.email,password:spec.password,email_confirm:true,
-          app_metadata:{casaflow_demo:true,casaflow_demo_session_id:sessionId,casaflow_demo_role:spec.roleKey},
         });
         if(error) throw error;
+        const {error:metadataError}=await admin.auth.admin.updateUserById(data.user.id,{
+          app_metadata:{casaflow_demo:true,casaflow_demo_session_id:sessionId,casaflow_demo_role:spec.roleKey},
+        });
+        if(metadataError){await admin.auth.admin.deleteUser(data.user.id);throw metadataError;}
         created.push({userId:data.user.id,...spec});
       }
       const provision=await admin.rpc('provision_demo_workspace',{
