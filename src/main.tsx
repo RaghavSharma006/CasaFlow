@@ -69,16 +69,18 @@ function App(){
     const memberships=memberRows||[];
     if(!memberships.length){setHotel(null);setData(d=>({...d,memberships:[]}));setSync('live');return}
     const valid=memberships.some(m=>m.hotel_id===hotel)?hotel:memberships[0].hotel_id;
-    if(valid!==hotel){setHotel(valid);hotelStorage.setItem('casaflow-hotel',valid!);return}
-    if(!parallelMode&&!window.sessionStorage.getItem('casaflow-signin-pending')){
+    if(valid!==hotel){setHotel(valid);hotelStorage.setItem('casaflow-hotel',valid!)}
+    if(!parallelMode){
      const shift=await db.from('staff_dispatch').select('shift_started_at,shift_ends_at,on_shift').eq('hotel_id',valid!).eq('user_id',session.user.id).maybeSingle();
      if(shift.error)throw shift.error;
-     if(!shift.data?.shift_started_at){await rpc('begin_work_shift',{p_hotel:valid!})}
-     else if(!shift.data.on_shift||!shift.data.shift_ends_at||Date.parse(shift.data.shift_ends_at)<=Date.now()){
+     if(shift.data?.shift_started_at&&(!shift.data.on_shift||!shift.data.shift_ends_at||Date.parse(shift.data.shift_ends_at)<=Date.now())){
        await db.auth.signOut();setSession(null);setHotel(null);hotelStorage.removeItem('casaflow-hotel');notify('Your shift has ended. Sign in to begin your next shift.');return;
      }
+     const [next]=await Promise.all([queryData(valid!),!shift.data?.shift_started_at?rpc('begin_work_shift',{p_hotel:valid!}):Promise.resolve(null)]);
+     setData(next);setLastSync(Date.now());setLastError('');setSync('live');
+    }else{
+     const next=await queryData(valid!);setData(next);setLastSync(Date.now());setLastError('');setSync('live');
     }
-    const next=await queryData(valid!);setData(next);setLastSync(Date.now());setLastError('');setSync('live');
   }catch(err:any){setSync('offline');setLastError(err.message||String(err));notify(err.message||String(err))}})();
   inFlight.current=request;
   try{await request;}finally{
@@ -184,7 +186,7 @@ function App(){
  if(location.pathname==='/guest')return <Guest lang={lang} setLang={setLang} theme={theme} setTheme={setTheme}/>;
  if(!configured)return <div className="authpage"><div className="authcard"><div className="logo large"><Building2/></div><h1>CasaFlow</h1><p>{t.demoDisabled}</p><div className="notice">{t.demoExplain}</div><p className="tiny">See README.md for the isolated Supabase project setup. Existing live demo remains unchanged.</p></div></div>;
  if(checking)return <div className="authpage"><Loader2 className="spin" size={30}/></div>;
- if(!session)return <Auth lang={lang} setLang={setLang} theme={theme} setTheme={setTheme} notify={notify}/>;
+ if(!session)return <Auth lang={lang} setLang={setLang} theme={theme} setTheme={setTheme} notify={notify} onAuthenticated={setSession}/>;
  if(!hotel||!myMember)return <Onboard t={t} lang={lang} theme={theme} setTheme={setTheme} setLang={setLang} onJoined={(id)=>{hotelStorage.setItem('casaflow-hotel',id);setHotel(id)}} notify={notify}/>;
  return <div className="app atelier-app a7 cf8" data-theme={theme==='dark'?'night':'light'}><aside className={'sidebar '+(menu?'open':'')}><div className="brand"><span className="atelier-brand-glyph" aria-hidden="true">C</span><div><strong>CasaFlow</strong><span>HOTEL OPERATIONS</span></div><IconButton onClick={()=>setMenu(false)}><X size={18}/></IconButton></div><div className="hotelcard"><div className="hotelavatar">{display.slice(0,2).toUpperCase()}</div><div><b>{display}</b><span>{roleLabel[role]} Workspace</span></div><ChevronDown size={16}/></div><p className="navlabel">{t.workspace} / 01</p><nav aria-label="Hotel workspaces">{navItems.filter(n=>permitted.includes(n.id)).map(({id,icon:Icon},i)=><button key={id} title={t[id]} className={'cf8-nav-item '+(view===id?'active':'')} aria-current={view===id?'page':undefined} onClick={()=>{setView(id);setMenu(false);setMoreOpen(false);setSearch('');setStatusFilter('all')}}><span className="nav-index">{String(i+1).padStart(2,'0')}</span><Icon size={18}/><span>{t[id]}</span>{id==='requests'&&pending.filter(k=>k.kind==='guest').length>0&&<i>{pending.filter(k=>k.kind==='guest').length}</i>}</button>)}{permitted.length>4&&<button type="button" className="cf8-mobile-more-button" aria-label="More workspaces" aria-expanded={moreOpen} onClick={()=>setMoreOpen(v=>!v)}><Menu size={20}/><span>More</span></button>}</nav><div className="sidebarbottom"><a className="demo-foot" href="/dev">{t.devMode}</a><div className="livehint"><span className={'syncdot '+sync}/><div><b>{t.allDepartments}</b><small>{t[sync==='live'?'online':sync==='connecting'?'syncing':'offline']}</small></div></div><div className="profile"><div className="roundavatar">{myMember.display_name.slice(0,2).toUpperCase()}</div><div><b>{myMember.display_name}</b><small>{roleLabel[role]}</small></div><button type="button" className="cf8-signout-side" onClick={()=>void signOut()} disabled={signingOut} aria-label={t.logout} title={t.logout}><LogOut size={17}/><span>{t.logout}</span></button></div></div></aside>
  {moreOpen&&<div className="cf8-more-overlay" role="presentation" onClick={()=>setMoreOpen(false)}><div className="cf8-more-sheet" role="menu" aria-label="Hotel workspaces" onClick={e=>e.stopPropagation()}><div className="cf8-more-head"><strong>{lang==='en'?'All workspaces':'Todos los espacios'}</strong><button type="button" aria-label="Close menu" onClick={()=>setMoreOpen(false)}><X size={20}/></button></div>{navItems.filter(n=>permitted.includes(n.id)).map(({id,icon:Icon})=><button type="button" role="menuitem" key={id} className={id===view?'active':''} onClick={()=>{setView(id);setMoreOpen(false);setSearch('');setStatusFilter('all')}}><Icon size={18}/>{t[id]}</button>)}</div></div>}
@@ -285,7 +287,7 @@ function DispatchModal({lang,member,profile,close,save}:{lang:'en'|'es',member:M
  </form>
  </Modal>
 }
-function Auth({lang,setLang,theme,setTheme,notify}:{lang:'en'|'es',setLang:(v:'en'|'es')=>void,theme:string,setTheme:(v:string)=>void,notify:(v:string)=>void}){
+function Auth({lang,setLang,theme,setTheme,notify,onAuthenticated}:{lang:'en'|'es',setLang:(v:'en'|'es')=>void,theme:string,setTheme:(v:string)=>void,notify:(v:string)=>void,onAuthenticated:(session:any)=>void}){
  const t=labels[lang];
  const [signUp,setSignUp]=useState(false),[email,setEmail]=useState(''),[password,setPassword]=useState('');
  const [working,setWorking]=useState(false),[notice,setNotice]=useState<{kind:'error'|'success'|'info',text:string}|null>(null),[pendingEmail,setPendingEmail]=useState('');
@@ -316,22 +318,17 @@ function Auth({lang,setLang,theme,setTheme,notify}:{lang:'en'|'es',setLang:(v:'e
     const {data,error}=await db.auth.signUp({email:normalized,password,options:{emailRedirectTo:confirmLink()}});
     if(error)throw error;
     if(data.session){
+     onAuthenticated(data.session);
      feedback('success',lang==='en'?'Account created and signed in.':'Cuenta creada y sesión iniciada.');
     }else{
      setPendingEmail(normalized);
      feedback('success',lang==='en'?'Account request received. Check your email for the verification link, click it, then return here to sign in. Your account cannot sign in until verified.':'Solicitud recibida. Revise su correo, abra el enlace de verificación y vuelva aquí para iniciar sesión. No podrá acceder hasta verificar su cuenta.');
     }
    }else{
-    window.sessionStorage.setItem('casaflow-signin-pending','1');
-    try{
-     const {data:login,error}=await db.auth.signInWithPassword({email:normalized,password});
-     if(error)throw error;
-     const {data:members,error:memberError}=await db.from('memberships').select('hotel_id').eq('user_id',login.user.id).eq('active',true).limit(1);
-     if(memberError)throw memberError;
-     if(members?.length)await rpc('begin_work_shift',{p_hotel:members[0].hotel_id});
-     feedback('success',lang==='en'?'Signed in — your work shift has started.':'Sesión iniciada; comenzó su turno.');
-    }catch(err){await db.auth.signOut().catch(()=>null);throw err}
-    finally{window.sessionStorage.removeItem('casaflow-signin-pending');window.dispatchEvent(new Event('casaflow-shift-started'))}
+    const {data:login,error}=await db.auth.signInWithPassword({email:normalized,password});
+    if(error)throw error;
+    onAuthenticated(login.session);
+    feedback('success',lang==='en'?'Signed in — opening your workspace…':'Sesión iniciada; abriendo su espacio…');
    }
   }catch(err:any){
    const code=err?.code||'';
