@@ -1,25 +1,43 @@
 # CasaFlow marketing-site demo integration
 
-This repository owns the interactive hotel operations application. The marketing website at `casaflow.tech` should link to the app; it should not attempt to authenticate users itself.
+The marketing site at `casaflow.tech` creates a short-lived signed launch ticket. The hotel operations app verifies it server-side before creating a demo session.
 
-## CTA contract
+## Shared secret
 
-Use a normal link (not an iframe) for the marketing site's primary demo CTA:
+Configure the exact same random secret in both server environments:
+- Hotel app (Vercel): `CASAFLOW_DEMO_SHARED_SECRET`
+- Marketing site server: `CASAFLOW_DEMO_SHARED_SECRET`
 
-- Label: **Explore the interactive demo**
-- Current Preview target for internal review only: `https://hotel-ops-pilot-c6hsv5qq4-raghav-sharmas-projects-4bb7ee00.vercel.app/demo-launch`
-- Intended stable Production target after this branch is reviewed, merged, and deployed: `https://hotel-ops-pilot.vercel.app/demo-launch`
+Never expose this secret in browser code, `VITE_*` variables, HTML, client bundles, URLs, logs, or Git.
 
-Open the target in the same tab or a new tab with the usual safe external-link attributes. Do not pass credentials, access tokens, role passwords, or Supabase keys in the URL or query string. Optional role deep-linking is supported with one of the allowlisted values, for example `?role=manager`, but the default owner role is fine.
+## Ticket contract
 
-## Important launch status
+The marketing backend signs a compact ticket using HMAC-SHA256:
+1. JSON claims: `{iss:"https://casaflow.tech",aud:"hotel-ops-pilot",role,iat,exp,jti}`
+2. Base64url encode the JSON without padding to produce `payload`.
+3. Compute `signature = HMAC_SHA256(secret, payload)`, base64url encode without padding.
+4. Ticket is `payload.signature`.
+5. `iat` and `exp` are Unix seconds; expiry must be within 120 seconds of issue.
+6. `jti` must be a fresh cryptographically random unique ID.
+7. Allowed roles: `owner`, `manager`, `reception`, `supervisor`, `cleaner1`, `cleaner2`, `ac-technician`, `plumbing-technician`.
 
-The route and server-side launcher are implemented on `feat/secure-public-demo-launch`. The public launch endpoint intentionally remains fail-closed because `DEMO_PUBLIC_ENABLED=false` and `DEMO_DATA_ISOLATED=false`. Cloudflare Turnstile has deliberately not been configured yet. Therefore, do not present the CTA as a live, publicly usable demo until the app branch has been deployed to Production and the owner explicitly approves enabling public access after security and tenant-isolation testing.
+Redirect the visitor to:
+`https://hotel-ops-pilot.vercel.app/demo-launch?role=owner&ticket=<ticket>`
 
-For now, the Preview link is for internal review only. Do not point the live marketing website at the Preview URL as a public CTA.
+The hotel app removes the ticket from the address bar immediately and posts it to `/api/demo/launch`. It checks HMAC, issuer, audience, role, issue/expiry times, nonce reuse, origin, demo enablement, and demo account membership before returning a Supabase session.
 
-## Responsibilities
+## Required hotel app environment
 
-- Marketing site: render the CTA and link to the app URL above.
-- CasaFlow app: own demo role selection, authentication, session handling, role authorization, and guest QR workflows.
-- Never embed the app in an iframe or attempt cross-site session injection.
+Server-only:
+- `CASAFLOW_DEMO_SHARED_SECRET` (same value as marketing backend)
+- `DEMO_ALLOWED_ORIGINS=https://hotel-ops-pilot.vercel.app`
+- `DEMO_TENANT_ID`
+- `DEMO_PUBLIC_ENABLED=false` until owner approves
+- `DEMO_DATA_ISOLATED=false` until synthetic-only tenant and RLS isolation are verified
+- Existing dedicated demo role email/password variables listed in `public-demo-launch.md`
+
+Existing Supabase URL and publishable key remain as configured. Cloudflare Turnstile is not required.
+
+## Security limitation
+
+The Vercel in-memory nonce cache prevents ticket reuse within a warm function instance, but is best-effort across serverless instances/restarts. For strict global single-use enforcement, persist consumed `jti` values in a shared database with a unique constraint before enabling broad public traffic. Short expiry, HMAC verification, rate limiting, demo-only accounts, and RLS remain required.

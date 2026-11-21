@@ -16,15 +16,21 @@ test('demo roles are allowlisted and checked against tenant membership role',()=
  assert.match(api,/m\.role===selected\.expectedRole/);
  assert.match(api,/eq\('hotel_id',tenant\)/);
 });
-test('launch endpoint requires origin and Turnstile verification',()=>{
- assert.match(api,/allowedOrigin\(req\)/);
- assert.match(api,/verifyTurnstile\(body\.turnstileToken,ip\)/);
- assert.match(api,/TURNSTILE_SECRET_KEY/);
+test('demo launcher requires a signed CasaFlow handshake',()=>{
+ assert.match(api,/CASAFLOW_DEMO_SHARED_SECRET/);
+ assert.match(api,/createHmac\('sha256'/);
+ assert.match(api,/timingSafeEqual/);
+ assert.match(api,/claims\.iss!=='https:\/\/casaflow\.tech'/);
+ assert.match(api,/claims\.aud!=='hotel-ops-pilot'/);
+ assert.match(api,/consumedTickets/);
+ assert.doesNotMatch(api,/TURNSTILE|challenges\.cloudflare/i);
 });
-test('browser launcher never accepts credentials and hands off session without URL tokens',()=>{
+test('browser launcher accepts only a signed ticket and never embeds credentials',()=>{
  assert.match(launcher,/fetch\('\/api\/demo\/launch'/);
+ assert.match(launcher,/body:JSON\.stringify\(\{role,ticket\}\)/);
  assert.match(launcher,/db\.auth\.setSession/);
- assert.doesNotMatch(launcher,/password|service_role/i);
+ assert.match(launcher,/history\.replaceState/);
+ assert.doesNotMatch(launcher,/turnstile|password|service_role/i);
 });
 test('demo path receives a unique per-tab Supabase storage key',()=>{
  assert.match(db,/window\.location\.pathname==='\/demo-launch'/);
