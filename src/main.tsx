@@ -34,6 +34,7 @@ function Toast({value}:{value:string}){return value?<div className="toast"><Info
 function App(){
  const[lang,setLang]=useLang(),[theme,setTheme]=useTheme();const t=labels[lang];
  const [session,setSession]=useState<any>(null),[checking,setChecking]=useState(true);
+ const [membershipState,setMembershipState]=useState<'checking'|'ready'|'none'|'error'>('checking');
  const[hotel,setHotel]=useState<string|null>(hotelStorage.getItem('casaflow-hotel'));
  const[data,setData]=useState<Data>({hotels:[],memberships:[],rooms:[],tasks:[],activity:[],messages:[],privateMessages:[],staffDispatch:[],guestMeta:[],alerts:[]});
  const[view,setView]=useState<View>('overview'),[roomId,setRoomId]=useState<string|null>(null);
@@ -61,7 +62,29 @@ function App(){
   }catch(err:any){notify(err?.message||'Unable to sign out. Try again.')}
   finally{setSigningOut(false)}
  };
- useEffect(()=>{if(!db){setChecking(false);return}db.auth.getSession().then(({data,error})=>{if(error)notify(error.message);setSession(data.session);}).catch(()=>notify('Unable to restore login. Check your connection and refresh.')).finally(()=>setChecking(false));const{subscription}=db.auth.onAuthStateChange((_evt,s)=>{setSession(s);if(!s){setHotel(null);hotelStorage.removeItem('casaflow-hotel')}}).data;return()=>subscription.unsubscribe()},[]);
+ useEffect(()=>{
+  if(!db){setChecking(false);setMembershipState('error');return}
+  let authEventSeen=false;
+  const {data:{subscription}}=db.auth.onAuthStateChange((event,s)=>{
+   authEventSeen=true;
+   setSession(s);
+   if(event==='INITIAL_SESSION'||event==='SIGNED_IN'||event==='SIGNED_OUT'){
+    setChecking(false);
+    setMembershipState('checking');
+   }
+   if(!s){
+    setHotel(null);
+    hotelStorage.removeItem('casaflow-hotel');
+    setData(d=>({...d,memberships:[]}));
+    setSync('connecting');
+   }
+  });
+  db.auth.getSession().then(({data,error})=>{
+   if(error)notify(error.message);
+   if(!authEventSeen)setSession(data.session);
+  }).catch(()=>notify('Unable to restore login. Check your connection and refresh.')).finally(()=>setChecking(false));
+  return()=>subscription.unsubscribe();
+ },[]);
  const load=useCallback(async()=>{
   if(!db||!session?.user)return;
   if(inFlight.current){queued.current=true;await inFlight.current;return;}
@@ -69,7 +92,17 @@ function App(){
     const{data:memberRows,error}=await db.from('memberships').select('hotel_id,user_id,display_name,role,active').eq('user_id',session.user.id).eq('active',true);
     if(error)throw error;
     const memberships=memberRows||[];
-    if(!memberships.length){setHotel(null);setData(d=>({...d,memberships:[]}));setSync('live');return}
+    if(!memberships.length){
+     setMembershipState('none');
+     setHotel(null);
+     setData(d=>({...d,memberships:[]}));
+     setSync('live');
+     return;
+    }
+    // Resolve membership independently of the larger workspace query. A data
+    // loading failure must never be mistaken for a first-time/no-hotel account.
+    setMembershipState('ready');
+    setData(d=>({...d,memberships:memberships as Member[]}));
     const valid=memberships.some(m=>m.hotel_id===hotel)?hotel:memberships[0].hotel_id;
     if(valid!==hotel){setHotel(valid);hotelStorage.setItem('casaflow-hotel',valid!)}
     if(!parallelMode){
@@ -83,7 +116,7 @@ function App(){
     }else{
      const next=await queryData(valid!);setData(next);setLastSync(Date.now());setLastError('');setSync('live');
     }
-  }catch(err:any){setSync('offline');setLastError(err.message||String(err));notify(err.message||String(err))}})();
+  }catch(err:any){setMembershipState(current=>current==='ready'?'ready':'error');setSync('offline');setLastError(err.message||String(err));notify(err.message||String(err))}})();
   inFlight.current=request;
   try{await request;}finally{
     inFlight.current=null;
@@ -187,10 +220,11 @@ function App(){
  if(location.pathname==='/dev')return <DevSandbox lang={lang} theme={theme} setLang={setLang} setTheme={setTheme}/>;
  if(location.pathname==='/guest')return <Guest lang={lang} setLang={setLang} theme={theme} setTheme={setTheme}/>;
  if(!configured)return <div className="authpage"><div className="authcard"><div className="logo large"><Building2/></div><h1>CasaFlow</h1><p>{t.demoDisabled}</p><div className="notice">{t.demoExplain}</div><p className="tiny">See README.md for the isolated Supabase project setup. Existing live demo remains unchanged.</p></div></div>;
- if(checking)return <div className="authpage"><Loader2 className="spin" size={30}/></div>;
+ if(checking)return <div className="authpage"><Loader2 className="spin" size={30}/><p>Restoring your session…</p></div>;
  if(!session)return <Auth lang={lang} setLang={setLang} theme={theme} setTheme={setTheme} notify={notify} onAuthenticated={setSession}/>;
- if(sync==='connecting'&&(!hotel||!myMember))return <div className="authpage"><Loader2 className="spin" size={30}/><p>Opening your workspace…</p></div>;
- if(!hotel||!myMember)return <Onboard t={t} lang={lang} theme={theme} setTheme={setTheme} setLang={setLang} onJoined={(id)=>{hotelStorage.setItem('casaflow-hotel',id);setHotel(id)}} notify={notify}/>;
+ if(membershipState==='checking'||membershipState==='error')return <div className="authpage"><Loader2 className="spin" size={30}/><p>{membershipState==='error'?'Unable to verify your hotel access.':'Opening your workspace…'}</p>{membershipState==='error'&&<button className="button outline" type="button" onClick={()=>{setMembershipState('checking');void load()}}>Retry</button>}</div>;
+ if(membershipState==='none')return <Onboard t={t} lang={lang} theme={theme} setTheme={setTheme} setLang={setLang} onJoined={(id)=>{hotelStorage.setItem('casaflow-hotel',id);setHotel(id)}} notify={notify}/>;
+ if(!hotel||!myMember)return <div className="authpage"><Loader2 className="spin" size={30}/><p>Opening your workspace…</p></div>;
  return <div className="app atelier-app a7 cf8" data-theme={theme==='dark'?'night':'light'}><aside className={'sidebar '+(menu?'open':'')}><div className="brand"><span className="atelier-brand-glyph" aria-hidden="true">C</span><div><strong>CasaFlow</strong><span>HOTEL OPERATIONS</span></div><IconButton onClick={()=>setMenu(false)}><X size={18}/></IconButton></div><div className="hotelcard"><div className="hotelavatar">{display.slice(0,2).toUpperCase()}</div><div><b>{display}</b><span>{roleLabel[role]} Workspace</span></div><ChevronDown size={16}/></div><p className="navlabel">{t.workspace} / 01</p><nav aria-label="Hotel workspaces">{navItems.filter(n=>permitted.includes(n.id)).map(({id,icon:Icon},i)=><button key={id} title={t[id]} className={'cf8-nav-item '+(view===id?'active':'')} aria-current={view===id?'page':undefined} onClick={()=>{setView(id);setMenu(false);setMoreOpen(false);setSearch('');setStatusFilter('all')}}><span className="nav-index">{String(i+1).padStart(2,'0')}</span><Icon size={18}/><span>{t[id]}</span>{id==='requests'&&pending.filter(k=>k.kind==='guest').length>0&&<i>{pending.filter(k=>k.kind==='guest').length}</i>}</button>)}{permitted.length>4&&<button type="button" className="cf8-mobile-more-button" aria-label="More workspaces" aria-expanded={moreOpen} onClick={()=>setMoreOpen(v=>!v)}><Menu size={20}/><span>More</span></button>}</nav><div className="sidebarbottom"><a className="demo-foot" href="/dev">{t.devMode}</a><div className="livehint"><span className={'syncdot '+sync}/><div><b>{t.allDepartments}</b><small>{t[sync==='live'?'online':sync==='connecting'?'syncing':'offline']}</small></div></div><div className="profile"><div className="roundavatar">{myMember.display_name.slice(0,2).toUpperCase()}</div><div><b>{myMember.display_name}</b><small>{roleLabel[role]}</small></div><button type="button" className="cf8-signout-side" onClick={()=>void signOut()} disabled={signingOut} aria-label={t.logout} title={t.logout}><LogOut size={17}/><span>{t.logout}</span></button></div></div></aside>
  {moreOpen&&<div className="cf8-more-overlay" role="presentation" onClick={()=>setMoreOpen(false)}><div className="cf8-more-sheet" role="menu" aria-label="Hotel workspaces" onClick={e=>e.stopPropagation()}><div className="cf8-more-head"><strong>{lang==='en'?'All workspaces':'Todos los espacios'}</strong><button type="button" aria-label="Close menu" onClick={()=>setMoreOpen(false)}><X size={20}/></button></div>{navItems.filter(n=>permitted.includes(n.id)).map(({id,icon:Icon})=><button type="button" role="menuitem" key={id} className={id===view?'active':''} onClick={()=>{setView(id);setMoreOpen(false);setSearch('');setStatusFilter('all')}}><Icon size={18}/>{t[id]}</button>)}</div></div>}
  <div className="main"><header className="topbar"><div className="crumb"><IconButton onClick={()=>setMenu(true)}><Menu size={20}/></IconButton><span>{roleLabel[role].toUpperCase()} WORKSPACE</span><span className="slash">/</span><b>{display}</b></div><div className="topactions"><button className="headerbtn" disabled={refreshing} onClick={()=>void manualRefresh()} title="Refresh account data" aria-label="Refresh account data"><RefreshCw size={16} className={refreshing?'wf-spin':undefined}/></button>{canDesk&&view==='overview'&&<button type="button" className="button atelier-new-task" onClick={()=>setModal('task')}><Plus size={16}/>{t.newTask}</button>}<span className={'connect '+sync}><span className={'syncdot '+sync}/>{t[sync==='live'?'online':sync==='connecting'?'syncing':'offline']}</span><button className="headerbtn" onClick={()=>setLang(lang==='en'?'es':'en')}><Languages size={16}/>{lang==='en'?'ES':'EN'}</button><button className="headerbtn" onClick={()=>setTheme(theme==='light'?'dark':'light')}>{theme==='light'?<Moon size={18}/>:<Sun size={18}/>}</button><button type="button" className="cf8-signout-header" onClick={()=>void signOut()} disabled={signingOut} aria-label={t.logout} title={t.logout}><LogOut size={16}/><span>{t.logout}</span></button><div className="roundavatar mini">{myMember.display_name.slice(0,2).toUpperCase()}</div></div></header>
@@ -351,10 +385,7 @@ function Auth({lang,setLang,theme,setTheme,notify,onAuthenticated}:{lang:'en'|'e
    <button type="button" className="headerbtn" onClick={()=>setTheme(theme==='dark'?'light':'dark')}>{theme==='dark'?<Sun size={17}/>:<Moon size={17}/>}</button>
   </div>
   <h1>CasaFlow</h1><p>{t.allDepartments}</p>
-  {!resetMode?<div className="authswitch">
-   <button type="button" className={!signUp?'selected':''} onClick={()=>{setSignUp(false);resetView()}}>{t.login}</button>
-   <button type="button" className={signUp?'selected':''} onClick={()=>{setSignUp(true);resetView()}}>{t.signup}</button>
-  </div>:<h2>{lang==='en'?'Reset your password':'Restablecer contraseña'}</h2>}
+  {resetMode&&<h2>{lang==='en'?'Reset your password':'Restablecer contraseña'}</h2>}
   <form className="form" onSubmit={submit}>
    <label>{t.email}<div className="inputicon"><Mail size={17}/><input type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="team@hotel.com"/></div></label>
    {!resetMode&&<label>{t.password}<div className="inputicon"><Lock size={17}/><input type="password" required minLength={8} autoComplete={signUp?'new-password':'current-password'} value={password} onChange={e=>setPassword(e.target.value)}/></div></label>}
@@ -365,7 +396,7 @@ function Auth({lang,setLang,theme,setTheme,notify,onAuthenticated}:{lang:'en'|'e
   <div className="auth-links">
    {resetMode?<button type="button" onClick={resetView}>{lang==='en'?'Back to sign in':'Volver a iniciar sesión'}</button>:<button type="button" onClick={()=>{setResetMode(true);setPendingEmail('');setNotice(null)}}>{lang==='en'?'Forgot password?':'¿Olvidó su contraseña?'}</button>}
   </div>
-  <a className="button outline full dev-link" href="/dev"><Users size={17}/>{t.openDemo}</a><p className="tiny">{t.allDepartments}. {lang==='en'?'New accounts must verify their email before signing in.':'Las cuentas nuevas deben verificar el correo antes de iniciar sesión.'}</p>
+  <a className="button outline full dev-link" href="/dev"><Users size={17}/>{t.openDemo}</a><p className="tiny">{lang==='en'?'Sign in to open your hotel workspace.':'Inicie sesión para abrir el espacio de su hotel.'}</p>
  </div></div>
 }
 function Onboard({t,lang,theme,setTheme,setLang,onJoined,notify}:{t:L,lang:string,theme:string,setTheme:(v:string)=>void,setLang:(v:any)=>void,onJoined:(h:string)=>void,notify:(v:string)=>void}){const [name,setName]=useState(''),[city,setCity]=useState(''),[token,setToken]=useState(new URLSearchParams(location.search).get('invite')||''),[person,setPerson]=useState(''),[working,setWorking]=useState(false),[onboardError,setOnboardError]=useState('');const submit=async(method:'create'|'join')=>{setOnboardError('');setWorking(true);try{const h=method==='create'?await rpc<string>('create_hotel',{p_name:name,p_city:city}):await rpc<string>('accept_staff_invite',{p_token:token,p_display_name:person});await rpc('begin_work_shift',{p_hotel:h});onJoined(h);history.replaceState(null,'','/')}catch(e:any){setOnboardError(e.message||'Unable to complete setup')}finally{setWorking(false)}};return <div className="authpage"><div className="onboarding"><div className="authheader"><div className="logo large"><Building2/></div><button className="headerbtn" onClick={()=>setLang(lang==='en'?'es':'en')}>{lang==='en'?'ES':'EN'}</button><button className="headerbtn" onClick={()=>setTheme(theme==='dark'?'light':'dark')}>{theme==='dark'?<Sun size={17}/>:<Moon size={17}/>}</button></div><h1>{t.newHotel}</h1><p>{t.noHotel}</p><div className="onboardgrid"><section className="card"><h2>{t.createHotel}</h2><form className="form" onSubmit={e=>{e.preventDefault();void submit('create')}}><label>{t.enterName}<input minLength={2} required value={name} onChange={e=>setName(e.target.value)}/></label><label>{t.enterCity}<input value={city} onChange={e=>setCity(e.target.value)}/></label><button className="button primary full" disabled={working}>{t.createHotel}</button></form></section><section className="card"><h2>{t.joinHotel}</h2><form className="form" onSubmit={e=>{e.preventDefault();void submit('join')}}><label>{t.name}<input required minLength={2} value={person} onChange={e=>setPerson(e.target.value)}/></label><label>{t.inviteLink}<input required value={token} onChange={e=>setToken(e.target.value)}/></label><button className="button outline full" disabled={working}>{t.join}</button></form></section></div>{onboardError&&<div className="auth-notice error" role="alert">{onboardError}</div>}</div></div>}
