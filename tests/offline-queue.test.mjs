@@ -6,6 +6,7 @@ const ui=readFileSync(new URL('../src/main.tsx',import.meta.url),'utf8');
 const db=readFileSync(new URL('../src/db.ts',import.meta.url),'utf8');
 const migration=readFileSync(new URL('../supabase/20261121111827_preserve_offline_task_visibility_and_department_queues.sql',import.meta.url),'utf8');
 const dispatchMigration=readFileSync(new URL('../supabase/20261121120811_restore_worker_shift_access_and_queue_refill.sql',import.meta.url),'utf8');
+const claimMigration=readFileSync(new URL('../supabase/20261121174500_add_secure_department_task_claim.sql',import.meta.url),'utf8');
 
 test('maintenance overview counts the department queue, not only personally assigned tasks',()=>{
  assert.match(ui,/const workerQueue=pending\.filter/);
@@ -34,7 +35,7 @@ test('task and room reads still require active hotel membership',()=>{
  assert.match(migration,/app_private\.can_access\(hotel_id\)[\s\S]*?create policy rooms_read/);
 });
 test('workers can renew expired shifts without a forced sign-out',()=>{
- assert.match(ui,/const shiftInactive=!parallelMode&&!demoMode&&isShiftWorker/);
+ assert.match(ui,/const shiftInactive=!parallelMode&&isShiftWorker/);
  assert.match(ui,/rpc\('begin_work_shift'/);
  assert.doesNotMatch(ui,/await db\.auth\.signOut\(\);[\s\S]{0,180}Please sign in again to start your next shift/);
  assert.match(ui,/startShift=async/);
@@ -42,6 +43,9 @@ test('workers can renew expired shifts without a forced sign-out',()=>{
 test('workers can claim eligible open unassigned tasks through a protected RPC',()=>{
  assert.match(ui,/const mayClaim=\(task:Task\)=>/);
  assert.match(ui,/rpc\('claim_department_task'/);
+ assert.match(claimMigration,/app_private\.active_work_shift/);
+ assert.match(claimMigration,/v_task\.assigned_to is not null/);
+ assert.match(claimMigration,/v_skill=any\(s\.verified_skills\)/i);
  assert.match(dispatchMigration,/v_task\.assigned_to IS NOT NULL/);
  assert.match(dispatchMigration,/v_required_skill=ANY\(s\.verified_skills\)/);
  assert.match(dispatchMigration,/v_open_count>=v_capacity/);
