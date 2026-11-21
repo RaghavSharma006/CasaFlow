@@ -1,4 +1,5 @@
 import React,{useState,useEffect,useCallback,useRef,useMemo} from 'react';
+import DemoLaunch from './DemoLaunch';
 import{createRoot}from'react-dom/client';
 import{Building2,LayoutDashboard,BedDouble,Brush,Wrench,HandPlatter,Users,MessageSquare,Activity,Settings,Plus,Search,Sun,Moon,Languages,ArrowRight,CheckCircle2,Clock,AlertTriangle,RefreshCw,LogOut,Menu,X,ChevronDown,KeyRound,Copy,ShieldCheck,Columns3,ClipboardCheck,DoorOpen,PackageMinus,ChartNoAxesColumnIncreasing,MapPin,Loader2,Lock,Mail,Send,Link,UserRound,Calendar,Info}from'lucide-react';
 import QRCode from 'qrcode';
@@ -408,4 +409,4 @@ function Guest({lang,setLang,theme,setTheme}:{lang:'en'|'es',setLang:(v:'en'|'es
   <p className="tiny">{en?'Requests are limited to prevent misuse. For medical emergencies, contact emergency services or the front desk directly.':'Las solicitudes tienen límites. En caso de emergencia médica contacte a emergencias o recepción.'}</p>
  </div></div>
 }
-createRoot(document.getElementById('root')!).render(<App/>);
+createRoot(document.getElementById('root')!).render(location.pathname==='/demo-launch'?<DemoLaunch/>:<App/>);
