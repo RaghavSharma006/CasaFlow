@@ -56,3 +56,25 @@ test('sign-in screen has no create-account toggle',()=>{
 test('joining or creating a hotel immediately rechecks the new membership',()=>{
  assert.match(main,/hotelRef\.current=id;hotelStorage\.setItem\('casaflow-hotel',id\);setHotel\(id\);setMembershipState\('checking'\);void load\(\)/);
 });
+
+test('demo mode is enabled only by the secure per-tab demo launcher marker',()=>{
+ const db=readFileSync(new URL('../src/db.ts',import.meta.url),'utf8');
+ const launcher=readFileSync(new URL('../src/DemoLaunch.tsx',import.meta.url),'utf8');
+ const api=readFileSync(new URL('../api/demo/launch.ts',import.meta.url),'utf8');
+ assert.match(db,/export const demoMode=typeof window!=='undefined'&&window\.sessionStorage\.getItem\('casaflow-demo-session'\)==='1'/);
+ assert.match(api,/demo_mode:true/);
+ assert.match(launcher,/if\(result\.demo_mode!==true\)throw new Error/);
+ assert.match(launcher,/sessionStorage\.setItem\('casaflow-demo-session','1'\)/);
+});
+test('demo sessions never start or expire a staff shift',()=>{
+ assert.match(main,/!parallelMode&&!demoMode&&shift\?\.shift_started_at/);
+ assert.match(main,/!parallelMode&&!demoMode&&!shift\?\.shift_started_at/);
+ assert.match(main,/!hotel\|\|!shiftEnd\|\|parallelMode\|\|demoMode\)return/);
+ assert.match(main,/demoMode\?\(lang==='en'\?'Demo workspace'/);
+ assert.match(main,/DEMO · ALWAYS ON/);
+});
+test('demo logout is local-only and never ends the persistent demo shift',()=>{
+ assert.match(main,/if\(hotel&&!parallelMode&&!demoMode\)/);
+ assert.match(main,/db\.auth\.signOut\(parallelMode\|\|demoMode\?\{scope:'local'\}:undefined\)/);
+ assert.match(main,/removeItem\('casaflow-demo-session'\)/);
+});
