@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { adminClient, activeSession, assertSameOrigin, clientIp, cookieHeader, DEMO_ROLES, DEMO_TTL_SECONDS, hashSecret, json, randomSecret, readCookie, verifyTurnstile } from '../../server/demo-shared.js';
 
 function userSpecs(sessionId) {
@@ -29,7 +30,7 @@ export default async function handler(req,res) {
     if(rate.error) throw rate.error;
     if(rate.data!==true) return json(res,429,{error:'Too many demo launches. Please try again in 15 minutes.'});
 
-    const sessionId=crypto.randomUUID();
+    const sessionId=randomUUID();
     const cookieValue=randomSecret();
     const expiresAt=new Date(Date.now()+DEMO_TTL_SECONDS*1000).toISOString();
     const inserted=await admin.from('demo_sessions').insert({id:sessionId,cookie_hash:hashSecret(cookieValue),expires_at:expiresAt,ip_hash:ipHash});
