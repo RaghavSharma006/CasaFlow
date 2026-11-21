@@ -56,7 +56,7 @@ function App(){
    if(hotel&&!parallelMode){try{await rpc('end_work_shift',{p_hotel:hotel})}catch{/* The scheduled expiry worker will finalize an offline sign-out. */}}
    const {error}=await db.auth.signOut(parallelMode?{scope:'local'}:undefined);
    if(error)throw error;
-   setSession(null);setHotel(null);setMenu(false);setMoreOpen(false);
+   setSession(null);setHotel(null);hotelRef.current=null;setMenu(false);setMoreOpen(false);
    hotelStorage.removeItem('casaflow-hotel');
    if(parallelMode){window.sessionStorage.removeItem('casaflow-parallel-active');window.sessionStorage.removeItem('casaflow-demo-session');}
    window.location.replace('/');
@@ -74,6 +74,7 @@ function App(){
     setMembershipState('checking');
    }
    if(!s){
+    hotelRef.current=null;
     setHotel(null);
     hotelStorage.removeItem('casaflow-hotel');
     setData(d=>({...d,memberships:[]}));
@@ -96,6 +97,7 @@ function App(){
     if(!memberships.length){
      setMembershipState('none');
      setHotel(null);
+     hotelRef.current=null;
      hotelStorage.removeItem('casaflow-hotel');
      setData({hotels:[],memberships:[],rooms:[],tasks:[],activity:[],messages:[],privateMessages:[],staffDispatch:[],guestMeta:[],alerts:[]});
      setSync('live');
@@ -174,7 +176,7 @@ function App(){
    expired=true;
    try{await rpc('end_work_shift',{p_hotel:hotel})}catch{/* cron will handle reallocation if offline */}
    await db?.auth.signOut(parallelMode?{scope:'local'}:undefined).catch(()=>null);
-   setSession(null);setHotel(null);hotelStorage.removeItem('casaflow-hotel');notify('Shift finished. You have been signed out automatically.');
+   setSession(null);setHotel(null);hotelRef.current=null;hotelStorage.removeItem('casaflow-hotel');notify('Shift finished. You have been signed out automatically.');
   };
   const id=window.setInterval(()=>void check(),1000);
   window.addEventListener('focus',check);document.addEventListener('visibilitychange',check);
@@ -233,7 +235,7 @@ function App(){
  if(checking)return <div className="authpage"><Loader2 className="spin" size={30}/><p>Restoring your session…</p></div>;
  if(!session)return <Auth lang={lang} setLang={setLang} theme={theme} setTheme={setTheme} notify={notify} onAuthenticated={setSession}/>;
  if(membershipState==='checking'||membershipState==='error')return <div className="authpage"><Loader2 className="spin" size={30}/><p>{membershipState==='error'?'Unable to verify your hotel access.':'Opening your workspace…'}</p>{membershipState==='error'&&<button className="button outline" type="button" onClick={()=>{setMembershipState('checking');void load()}}>Retry</button>}</div>;
- if(membershipState==='none')return <Onboard t={t} lang={lang} theme={theme} setTheme={setTheme} setLang={setLang} onJoined={(id)=>{hotelStorage.setItem('casaflow-hotel',id);setHotel(id)}} notify={notify}/>;
+ if(membershipState==='none')return <Onboard t={t} lang={lang} theme={theme} setTheme={setTheme} setLang={setLang} onJoined={(id)=>{hotelRef.current=id;hotelStorage.setItem('casaflow-hotel',id);setHotel(id);setMembershipState('checking');void load()}} notify={notify}/>;
  if(!hotel||!myMember)return <div className="authpage"><Loader2 className="spin" size={30}/><p>Opening your workspace…</p></div>;
  return <div className="app atelier-app a7 cf8" data-theme={theme==='dark'?'night':'light'}><aside className={'sidebar '+(menu?'open':'')}><div className="brand"><span className="atelier-brand-glyph" aria-hidden="true">C</span><div><strong>CasaFlow</strong><span>HOTEL OPERATIONS</span></div><IconButton onClick={()=>setMenu(false)}><X size={18}/></IconButton></div><div className="hotelcard"><div className="hotelavatar">{display.slice(0,2).toUpperCase()}</div><div><b>{display}</b><span>{roleLabel[role]} Workspace</span></div><ChevronDown size={16}/></div><p className="navlabel">{t.workspace} / 01</p><nav aria-label="Hotel workspaces">{navItems.filter(n=>permitted.includes(n.id)).map(({id,icon:Icon},i)=><button key={id} title={t[id]} className={'cf8-nav-item '+(view===id?'active':'')} aria-current={view===id?'page':undefined} onClick={()=>{setView(id);setMenu(false);setMoreOpen(false);setSearch('');setStatusFilter('all')}}><span className="nav-index">{String(i+1).padStart(2,'0')}</span><Icon size={18}/><span>{t[id]}</span>{id==='requests'&&pending.filter(k=>k.kind==='guest').length>0&&<i>{pending.filter(k=>k.kind==='guest').length}</i>}</button>)}{permitted.length>4&&<button type="button" className="cf8-mobile-more-button" aria-label="More workspaces" aria-expanded={moreOpen} onClick={()=>setMoreOpen(v=>!v)}><Menu size={20}/><span>More</span></button>}</nav><div className="sidebarbottom"><a className="demo-foot" href="/dev">{t.devMode}</a><div className="livehint"><span className={'syncdot '+sync}/><div><b>{t.allDepartments}</b><small>{t[sync==='live'?'online':sync==='connecting'?'syncing':'offline']}</small></div></div><div className="profile"><div className="roundavatar">{myMember.display_name.slice(0,2).toUpperCase()}</div><div><b>{myMember.display_name}</b><small>{roleLabel[role]}</small></div><button type="button" className="cf8-signout-side" onClick={()=>void signOut()} disabled={signingOut} aria-label={t.logout} title={t.logout}><LogOut size={17}/><span>{t.logout}</span></button></div></div></aside>
  {moreOpen&&<div className="cf8-more-overlay" role="presentation" onClick={()=>setMoreOpen(false)}><div className="cf8-more-sheet" role="menu" aria-label="Hotel workspaces" onClick={e=>e.stopPropagation()}><div className="cf8-more-head"><strong>{lang==='en'?'All workspaces':'Todos los espacios'}</strong><button type="button" aria-label="Close menu" onClick={()=>setMoreOpen(false)}><X size={20}/></button></div>{navItems.filter(n=>permitted.includes(n.id)).map(({id,icon:Icon})=><button type="button" role="menuitem" key={id} className={id===view?'active':''} onClick={()=>{setView(id);setMoreOpen(false);setSearch('');setStatusFilter('all')}}><Icon size={18}/>{t[id]}</button>)}</div></div>}
