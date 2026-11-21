@@ -110,16 +110,25 @@ function App(){
     const selectedHotel=hotelRef.current;
     const valid=memberships.some(m=>m.hotel_id===selectedHotel)?selectedHotel:memberships[0].hotel_id;
     if(valid!==selectedHotel){hotelRef.current=valid;setHotel(valid);hotelStorage.setItem('casaflow-hotel',valid!)}
-    const next=await queryData(valid!,{memberships,includeChats:false});
-    const shift=next.staffDispatch.find(d=>d.user_id===session.user.id&&d.hotel_id===valid);
-    if(!parallelMode&&!demoMode&&shift?.shift_started_at&&(!shift.on_shift||!shift.shift_ends_at||Date.parse(shift.shift_ends_at)<=Date.now())){
-     await db.auth.signOut();
-     setSession(null);setHotel(null);hotelRef.current=null;hotelStorage.removeItem('casaflow-hotel');
-     notify('Your shift has ended. Sign in to begin your next shift.');
-     return;
+    let next=await queryData(valid!,{memberships,includeChats:false});
+    let shift=next.staffDispatch.find(d=>d.user_id===session.user.id&&d.hotel_id===valid);
+    const shiftExpired=!parallelMode&&!demoMode&&Boolean(shift?.shift_started_at&&(!shift.on_shift||!shift.shift_ends_at||Date.parse(shift.shift_ends_at)<=Date.now()));
+    // A fresh password sign-in is allowed to begin the next shift. The
+    // database verifies auth freshness and rebalances queued work atomically.
+    // Refresh after the RPC so reassigned tasks appear on this device at once.
+    if(shiftExpired){
+     try{
+      await rpc('begin_work_shift',{p_hotel:valid!});
+      next=await queryData(valid!,{memberships,includeChats:false});
+      shift=next.staffDispatch.find(d=>d.user_id===session.user.id&&d.hotel_id===valid);
+     }catch(err:any){
+      await db.auth.signOut();
+      setSession(null);setHotel(null);hotelRef.current=null;hotelStorage.removeItem('casaflow-hotel');
+      notify(err?.message||'Please sign in again to start your next shift.');
+      return;
+     }
     }
-    // Paint the workspace before starting a new shift. The RPC is still
-    // required, but it no longer delays the first populated dashboard render.
+    // Paint the workspace before starting a first-ever shift.
     setData(next);setLastSync(Date.now());setLastError('');setSync('live');
     if(!parallelMode&&!demoMode&&!shift?.shift_started_at){
      void rpc('begin_work_shift',{p_hotel:valid!}).catch(err=>{
