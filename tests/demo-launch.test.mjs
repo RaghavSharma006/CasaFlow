@@ -12,32 +12,34 @@ test('public demo launch is disabled unless isolated data is explicitly confirme
 });
 test('demo roles are allowlisted and checked against tenant membership role',()=>{
  assert.match(api,/const roles:/);
- assert.match(api,/hasOwnProperty\.call\(roles,body\.role\)/);
- assert.match(api,/m\.role===selected\.expectedRole/);
- assert.match(api,/eq\('hotel_id',tenant\)/);
+ assert.match(api,/hasOwnProperty\\.call\\(roles,body\\.role\\)/);
+ assert.match(api,/m\\.role===selected\\.expectedRole/);
+ assert.match(api,/eq\\('hotel_id',tenant\\)/);
 });
 test('demo launcher requires a signed CasaFlow handshake',()=>{
  assert.match(api,/CASAFLOW_DEMO_SHARED_SECRET/);
- assert.match(api,/createHmac\('sha256'/);
+ assert.match(api,/createHmac\\('sha256'/);
  assert.match(api,/timingSafeEqual/);
- assert.match(api,/claims\.iss!=='https:\/\/casaflow\.tech'/);
- assert.match(api,/claims\.aud!=='hotel-ops-pilot'/);
+ assert.match(api,/claims\\.iss!=='https:\\/\\/casaflow\\.tech'/);
+ assert.match(api,/claims\\.aud!=='hotel-ops-pilot'/);
  assert.match(api,/consumedTickets/);
- assert.doesNotMatch(api,/TURNSTILE|challenges\.cloudflare/i);
+ assert.doesNotMatch(api,/TURNSTILE|challenges\\.cloudflare/i);
 });
-test('browser launcher accepts only a signed ticket and never embeds credentials',()=>{
- assert.match(launcher,/fetch\('\/api\/demo\/launch'/);
- assert.match(launcher,/body:JSON\.stringify\(\{role,ticket\}\)/);
- assert.match(launcher,/db\.auth\.setSession/);
- assert.match(launcher,/history\.replaceState/);
- assert.doesNotMatch(launcher,/turnstile|password|service_role/i);
+test('browser launcher automatically opens the workspace from a signed ticket',()=>{
+ assert.match(launcher,/fetch\\('\\/api\\/demo\\/launch'/);
+ assert.match(launcher,/body:JSON\\.stringify\\(\\{role,ticket\\}\\)/);
+ assert.match(launcher,/db\\.auth\\.setSession/);
+ assert.match(launcher,/history\\.replaceState/);
+ assert.match(launcher,/started\\.current=true;void launch\\(\\)/);
+ assert.match(launcher,/useRef\\(false\\)/);
+ assert.doesNotMatch(launcher,/<button|<select|onClick=|turnstile|password|service_role/i);
 });
 test('demo path receives a unique per-tab Supabase storage key',()=>{
- assert.match(db,/window\.location\.pathname==='\/demo-launch'/);
- assert.match(db,/casaflow-parallel-\$\{tabId\}-auth-token/);
+ assert.match(db,/window\\.location\\.pathname==='\\/demo-launch'/);
+ assert.match(db,/casaflow-parallel-\\$\\{tabId\\}-auth-token/);
 });
 test('parallel/demo tabs use local logout and never end the shared work shift',()=>{
- assert.match(main,/db\.auth\.signOut\(parallelMode\?\{scope:'local'\}:undefined\)/);
- assert.match(main,/if\(hotel&&!parallelMode\)/);
- assert.match(main,/!shiftEnd\|\|parallelMode/);
+ assert.match(main,/db\\.auth\\.signOut\\(parallelMode\\?\\{scope:'local'\\}:undefined\\)/);
+ assert.match(main,/if\\(hotel&&!parallelMode\\)/);
+ assert.match(main,/!shiftEnd\\|\\|parallelMode/);
 });
