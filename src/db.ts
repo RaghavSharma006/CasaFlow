@@ -22,7 +22,7 @@ export const configured=Boolean(url&&key);
 // continue to use the default persistent Supabase storage unchanged.
 const PARALLEL_FLAG='casaflow-parallel-active';
 export const parallelMode=typeof window!=='undefined'&&(
- new URLSearchParams(window.location.search).get('parallel')==='1'||
+ (new URLSearchParams(window.location.search).get('parallel')==='1'||window.location.pathname==='/demo-launch')||
  window.sessionStorage.getItem(PARALLEL_FLAG)==='1'
 );
 let parallelAuthKey: string | undefined;
