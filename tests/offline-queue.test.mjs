@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 
 const ui=readFileSync(new URL('../src/main.tsx',import.meta.url),'utf8');
 const db=readFileSync(new URL('../src/db.ts',import.meta.url),'utf8');
-const migration=readFileSync(new URL('../supabase/20261121111827_preserve_offline_task_visibility_and_department_queues.sql',import.meta.url),'utf8')+'\\n'+readFileSync(new URL('../supabase/20261121120811_restore_worker_shift_access_and_queue_refill.sql',import.meta.url),'utf8');
+const migration=readFileSync(new URL('../supabase/20261121111827_preserve_offline_task_visibility_and_department_queues.sql',import.meta.url),'utf8');\nconst dispatchMigration=readFileSync(new URL('../supabase/20261121120811_restore_worker_shift_access_and_queue_refill.sql',import.meta.url),'utf8');
 
 test('maintenance overview counts the department queue, not only personally assigned tasks',()=>{
  assert.match(ui,/const workerQueue=pending\.filter/);
@@ -52,6 +52,6 @@ test('workers can claim eligible open unassigned tasks through a protected RPC',
  assert.match(ui,/v_open_count>=v_capacity/);
 });
 test('completed work triggers automatic queue refill',()=>{
- assert.match(migration,/CREATE TRIGGER casaflow_rebalance_released_work/);
+ assert.match(dispatchMigration,/CREATE TRIGGER casaflow_rebalance_released_work/);
  assert.match(migration,/PERFORM app_private\.rebalance_work\(NEW\.hotel_id\)/);
 });
